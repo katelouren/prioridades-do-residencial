@@ -27,6 +27,60 @@ Nesse caso, abra http://127.0.0.1:8001.
 
 O perfil é reconhecido pelo código. Códigos substituídos continuam revogados após reiniciar. Guarde o novo código mostrado pela gestão; para gerar outro, reutilize **exatamente o mesmo identificador da residência**.
 
+## Automação local: higiene da academia → ordem de limpeza
+
+A branch **`automacao-limpeza`** acrescenta solicitações privadas por residência e a fila de limpeza da gestão. A branch `main` mantém a versão publicada da GS2. Esta etapa é local; não configura prazos, alertas, WhatsApp ou agenda externa.
+
+Para demonstrar no Mac com uma base separada das consultas já utilizadas:
+
+```sh
+cd ~/Downloads/PR-GlobalSolution
+git switch automacao-limpeza
+RESIDENCIAL_DB=/tmp/pr-limpeza-demo.sqlite3 python3 demo.py
+```
+
+Abra http://127.0.0.1:8000. Se precisar de outra porta, acrescente `RESIDENCIAL_PORT=8001` antes de `python3 demo.py` e abra a porta correspondente. O arquivo informado persiste entre execuções; escolha outro nome para uma nova demonstração limpa. Não apague bancos existentes.
+
+1. Entre com **`demo-morador-1`**, abra **Minhas solicitações** e escreva **Os aparelhos da academia estão sujos**. Local Academia e categoria Higiene ficam visíveis e não editáveis neste caso inicial.
+2. Clique em **Enviar solicitação**. Anote o protocolo `SOL-…`: a solicitação aparece como **Pendente**, e a mensagem confirma que a ordem de limpeza foi criada automaticamente.
+3. Saia e entre com **`demo-gestao`**. Em **Fila de limpeza**, encontre o mesmo protocolo, local, descrição e data de abertura. Clique em **Abrir tarefa**.
+4. Em **O que foi feito?**, escreva **Aparelhos higienizados** e clique em **Confirmar conclusão**. A tarefa passa a **Concluída**, com devolutiva e data de conclusão.
+5. Volte como **`demo-morador-1`** e abra **Minhas solicitações**: o mesmo protocolo mostra **Concluída** e **Aparelhos higienizados**. O botão **Atualizar solicitações** busca as mudanças sem precisar sair do portal.
+6. Entre com **`demo-morador-2`**: a solicitação da primeira residência não aparece. O isolamento vale também ao tentar acessar o protocolo diretamente pela API.
+7. Pare com Control+C e rode o mesmo comando novamente: o protocolo e a devolutiva continuam salvos. As telas de Consultas, Acompanhamento, gestão de convites e regras continuam disponíveis.
+
+Use apenas informações fictícias e não inclua dados pessoais na descrição. Uma solicitação gera uma ordem; a pessoa pode abrir mais de uma solicitação. Esta etapa não tenta agrupar pedidos semelhantes. Uma ordem concluída não pode ser concluída de novo nem ter seu retorno sobrescrito por outra conclusão.
+
+### Onde está a automação no código
+
+| Papel | Arquivo e função | O que acontece |
+| --- | --- | --- |
+| Gatilho na interface | `public/app.js` → `requestsPage()` | O envio chama `api('/api/requests', ...)` com local, categoria e descrição. Não cria a ordem no navegador. |
+| Entrada autenticada | `server.py` → `Handler.api()` e `Handler.mutate()` | Valida o código ativo, inicia a transação, identifica a residência e trata o POST. A residência vem do acesso, não de um campo enviado pelo usuário. |
+| Regra de encaminhamento | `encaminhamento.py` → `identificar_equipe(local, categoria)` | Remove espaços, ignora diferenças entre maiúsculas/minúsculas e retorna **Equipe de limpeza** apenas para Academia + Higiene. |
+| Gravação automática | `solicitacoes.py` → `criar_solicitacao()` | Valida os dados, aplica a regra, gera o protocolo e faz os dois INSERTs: `service_requests` e `work_orders`. A ordem nasce Pendente. |
+| Confirmação ou rollback | `server.py` → `Handler.api()` | O bloco `with db` com `BEGIN IMMEDIATE` confirma ambos os INSERTs juntos. Se uma gravação falhar, reverte toda a operação e informa o erro. |
+| Lista privada | `solicitacoes.py` → `listar_solicitacoes()` | O SQL filtra a residência autenticada, inclusive na consulta de um único protocolo. |
+| Fila e conclusão | `solicitacoes.py` → `listar_fila_limpeza()` e `concluir_ordem()` | A gestão lista as ordens e grava status, devolutiva e data no mesmo UPDATE, dentro da transação do servidor. |
+| Telas de atendimento | `public/app.js` → `cleaningQueue()`, `cleaningDetail()` e `serviceCard()` | Mostram a fila, a conclusão e o retorno. Ambas as telas leem o mesmo estado persistido. |
+
+**Por que o status fica em uma única tabela?** `service_requests` guarda protocolo, residência, local, categoria, descrição e abertura. `work_orders` guarda o vínculo único com a solicitação, equipe, status, devolutiva e conclusão. Um JOIN reúne esses dados para morador e gestão; não existem duas cópias de status que possam divergir. O banco exige que uma ordem Concluída tenha devolutiva e data, e que uma Pendente não tenha esses campos preenchidos.
+
+As tabelas são acrescentadas por `solicitacoes.criar_tabelas()`, chamada dentro da migração transacional de `server.init()`. Nenhuma consulta, pergunta, participação ou devolutiva da GS2 é apagada ou modificada. O teste de migração usa uma cópia de uma base com o schema anterior e confere que os registros antigos continuam iguais.
+
+Endpoints da automação:
+
+| Método e caminho | Perfil | Ação |
+| --- | --- | --- |
+| `POST /api/requests` | Morador | Criar solicitação e ordem automaticamente |
+| `GET /api/requests` | Morador | Listar apenas a própria residência |
+| `GET /api/requests/SOL-…` | Morador | Consultar protocolo da própria residência; outro retorna 404 |
+| `GET /api/cleaning` | Gestão | Listar fila de limpeza |
+| `GET /api/cleaning/SOL-…` | Gestão | Consultar uma tarefa |
+| `POST /api/cleaning/SOL-…/complete` | Gestão | Concluir com devolutiva |
+
+O servidor rejeita ações de gestão feitas por morador, códigos inválidos/revogados, descrição vazia ou acima de 1500 caracteres e locais/categorias fora do caso inicial. A troca do código preserva o acesso aos protocolos da residência. Campos extras enviados pelo cliente não mudam residência, equipe ou status.
+
 ## Telas e navegação
 
 - **Consultas do residencial:** cartões com contexto breve, status, prazo e ação conforme o estado: Responder, Acompanhar consulta ou Ver resultado e retorno. Os formulários ficam apenas no detalhe. No perfil da gestão, a lista apresenta as tarefas de criar consulta, gerenciar convites e abrir o gerenciamento de cada assunto.
@@ -113,16 +167,19 @@ Para repetir o teste opcional de navegador (requer Node.js, que não é necessá
 npm install --prefix /tmp/residencial-browser playwright --no-audit --no-fund
 /tmp/residencial-browser/node_modules/.bin/playwright install chromium
 NODE_PATH=/tmp/residencial-browser/node_modules node tests/ui.cjs
+NODE_PATH=/tmp/residencial-browser/node_modules node tests/limpeza-ui.cjs
 ```
 
 `PR_BROWSER=/caminho/do/chromium` seleciona um navegador já instalado. O teste cria/remove sua base temporária e para seu servidor local. Capturas ficam em `docs/screenshots/`. A verificação de navegador usa larguras de 375 e 1280 px; não substitui teste em celular físico ou com leitor de tela.
+
+A suíte Python inclui a automação em `tests/test_solicitacoes.py`: criação vinculada, privacidade por residência, código substituído, validação de dados, conclusão, persistência e migração em cópia. Dois testes provocam falhas reais por triggers SQLite para provar rollback na criação da ordem e na conclusão. `tests/limpeza-ui.cjs` verifica no navegador o roteiro descrito acima, o isolamento do segundo morador, reinício e votação GS2 na mesma base. Ambos os testes de navegador usam bases temporárias próprias.
 
 ## Evoluções ainda não implementadas
 
 - **Captação e apresentação comercial:** página pública, adesão de residenciais e contratação, mantendo o portal como área de participação.
 - **WhatsApp:** link direto à consulta compartilhada, mantendo autenticação e uma participação por residência. Nenhum envio foi configurado.
 - **Orçamento e reservas:** saldo informado pela gestão, data de referência e valores comprometidos, quando disponíveis.
-- **Solicitações privadas:** protocolo, responsável, histórico, status e prazo de retorno, com acesso restrito ao solicitante e à equipe autorizada.
+- **Evolução das solicitações privadas:** o caso de higiene da academia já funciona com protocolo, equipe, status e devolutiva. Ficam para depois outros locais/categorias, histórico de alterações, prazos de retorno, alertas e integração com agenda externa.
 - **Relatório mensal de IA:** temas recorrentes em solicitações e sugestões, com propostas de enquetes, reuniões ou ações junto às áreas responsáveis. Cada sugestão deverá apresentar sua base, trabalhar com dados agregados e passar por revisão humana antes de qualquer envio. Nenhum serviço de IA foi conectado.
 
 O trabalho é local. Não há publicação na internet, envio de mensagens ou integração externa de IA.

@@ -69,8 +69,13 @@ function submit(form, label, action) {
   return button;
 }
 function route() { return location.hash.slice(1) || 'consultas'; }
+async function loadModel(access = code) {
+  const data = await api('/api/surveys', undefined, access);
+  const services = await api(data.admin ? '/api/cleaning' : '/api/requests', undefined, access);
+  return {...data, requests: data.admin ? services.orders : services.requests};
+}
 async function refresh(text, to) {
-  model = await api('/api/surveys');
+  model = await loadModel();
   if (to) history.replaceState(null, '', `#${to}`);
   draw(); message(text); focusPage();
 }
@@ -119,7 +124,7 @@ function login() {
   const entry = field(form, 'Código de acesso', 'access', 'input', {type:'password',required:'',autocomplete:'off',placeholder:'Digite seu código'});
   submit(form, 'Entrar', async () => {
     const candidate = entry.value.trim();
-    const data = await api('/api/surveys', undefined, candidate);
+    const data = await loadModel(candidate);
     sessionGeneration += 1;
     code = candidate; model = data;
     draw(); focusPage();
@@ -341,7 +346,7 @@ function invites() {
     const generated=await api('/api/invites',{residence:residence.value});
     output.textContent=`Código gerado para ${residence.value.trim()}: ${generated.code}. O código anterior perdeu o acesso. Copie e guarde este código; ele só aparece agora.`;
     // Atualiza a lista sem remover o código recém-gerado da tela.
-    model=await api('/api/surveys');
+    model=await loadModel();
     residenceList.replaceChildren(...model.residences.map(r=>el('li',r.identifier)));
     message('Código gerado. As participações anteriores foram preservadas.');
   });
@@ -373,6 +378,86 @@ function resources() {
   }
   container.append(channels,documents,references);return container;
 }
+function formatDateTime(value) {
+  return value ? new Date(value).toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'}) : 'A informar';
+}
+function serviceCard(item, admin = false) {
+  const box = panel(`Protocolo ${item.protocol}`, 2, admin ? 'order-card' : 'request-card');
+  box.setAttribute('data-protocol', item.protocol);
+  box.append(badge(item.status, item.status === 'Concluída' ? 'closed' : 'open'),
+    el('p', `${item.local} · ${item.category}`, {class:'service-context'}),
+    el('p', item.description, {class:'service-description'}),
+    facts([['Aberta em', formatDateTime(item.created_at)], ['Equipe responsável', item.team]]));
+  if (item.status === 'Concluída') {
+    const feedback = el('div', undefined, {class:'service-feedback'});
+    feedback.append(el('h3', 'Devolutiva'), el('p', item.feedback), el('p', `Concluída em ${formatDateTime(item.completed_at)}`, {class:'hint'}));
+    box.append(feedback);
+  } else if (!admin) box.append(el('p', 'A ordem de limpeza foi criada automaticamente e aguarda execução.', {class:'hint'}));
+  if (admin) box.append(link(item.status === 'Pendente' ? 'Abrir tarefa' : 'Ver conclusão', `#limpeza/${item.protocol}`, 'primary'));
+  return box;
+}
+function requestsPage() {
+  const container = el('div');
+  container.append(heading('Minhas solicitações', 'Solicite a higiene da academia e acompanhe o atendimento pelo protocolo.'));
+  const refreshForm = el('form', undefined, {class:'service-refresh'});
+  submit(refreshForm, 'Atualizar solicitações', async () => { await refresh('Solicitações atualizadas.'); });
+  container.append(refreshForm);
+  const layout = el('div', undefined, {class:'service-layout'});
+  const box = panel('Solicitar higiene da academia');
+  box.append(el('p', 'Uma ordem será encaminhada automaticamente à equipe de limpeza. Use apenas dados fictícios nesta demonstração.', {class:'quiet'}));
+  const form = el('form');
+  const fixed = el('div', undefined, {class:'form-grid'});
+  field(fixed, 'Local', 'service-local', 'input', {value:'Academia', readonly:''});
+  field(fixed, 'Categoria', 'service-category', 'input', {value:'Higiene', readonly:''});
+  form.append(fixed);
+  const description = field(form, 'Descrição da solicitação', 'service-description', 'textarea', {required:'',maxlength:'1500',rows:'4',placeholder:'Ex.: Os aparelhos da academia estão sujos'});
+  form.append(el('p', 'Descreva o que precisa ser limpo, sem incluir dados pessoais. Limite de 1500 caracteres.', {class:'hint'}));
+  submit(form, 'Enviar solicitação', async () => {
+    // O POST é o gatilho; a criação da OS acontece exclusivamente no servidor.
+    const result = await api('/api/requests', {local:'Academia',category:'Higiene',description:description.value});
+    await refresh(`Solicitação ${result.request.protocol} registrada. Ordem de limpeza criada automaticamente.`, 'solicitacoes');
+  });
+  box.append(form);
+  const list = el('section', undefined, {'aria-label':'Solicitações da minha residência',class:'service-list'});
+  list.append(el('h2', 'Histórico da residência'));
+  if (!model.requests.length) list.append(el('p', 'Você ainda não tem solicitações.', {class:'empty-inline'}));
+  for (const item of model.requests) list.append(serviceCard(item));
+  layout.append(box,list);container.append(layout);return container;
+}
+function cleaningQueue() {
+  const container = el('div');
+  container.append(heading('Fila de limpeza', 'Ordens criadas automaticamente pelas solicitações de higiene da academia.', 'ÁREA DA GESTÃO'));
+  const form = el('form', undefined, {class:'service-refresh'});
+  submit(form, 'Atualizar fila', async () => { await refresh('Fila de limpeza atualizada.'); });
+  container.append(form);
+  for (const [title, status] of [['Pendentes','Pendente'],['Concluídas','Concluída']]) {
+    const group = el('section', undefined, {class:'tracking-group'});
+    group.append(el('h2', title));
+    const items = model.requests.filter(item => item.status === status);
+    if (!items.length) group.append(el('p', status === 'Pendente' ? 'Nenhuma ordem de limpeza pendente.' : 'Nenhuma ordem concluída.', {class:'empty-inline'}));
+    const grid = el('div', undefined, {class:'survey-grid'});
+    for (const item of items) grid.append(serviceCard(item,true));
+    group.append(grid);container.append(group);
+  }
+  return container;
+}
+function cleaningDetail(item) {
+  const container = el('div', undefined, {class:'detail'});
+  container.append(link('Voltar à fila de limpeza','#limpeza','back-link'), heading(`Ordem ${item.protocol}`, 'Higiene da academia · atendimento da equipe de limpeza', 'ÁREA DA GESTÃO'));
+  container.append(serviceCard(item));
+  if (item.status === 'Pendente') {
+    const box = panel('Concluir a ordem de serviço');
+    box.append(el('p', 'Ao confirmar, o status e a devolutiva serão salvos juntos e ficarão disponíveis para a residência no mesmo protocolo.', {class:'quiet'}));
+    const form = el('form');
+    const feedback = field(form, 'O que foi feito?', 'cleaning-feedback', 'textarea', {required:'',maxlength:'1500',rows:'4',placeholder:'Ex.: Aparelhos higienizados'});
+    submit(form, 'Confirmar conclusão', async () => {
+      await api(`/api/cleaning/${item.protocol}/complete`, {feedback:feedback.value});
+      await refresh('Conclusão e devolutiva salvas. A residência já pode acompanhar o retorno no mesmo protocolo.');
+    });
+    box.append(form);container.append(box);
+  }
+  return container;
+}
 function draw() {
   if(!model)return;
   logout.hidden=false;
@@ -380,9 +465,9 @@ function draw() {
   const profile=document.querySelector('#profile');profile.hidden=false;profile.textContent=model.admin?'Gestão':'Morador';
   const current=route();
   const nav=el('nav',undefined,{'aria-label':'Navegação do portal',class:'portal-nav'});
-  for(const [label,to] of [['Consultas','consultas'],['Acompanhamento','acompanhamento'],['Regras e contatos','regras']]){
+  for(const [label,to] of [['Consultas','consultas'],['Acompanhamento','acompanhamento'],[model.admin ? 'Fila de limpeza' : 'Minhas solicitações',model.admin ? 'limpeza' : 'solicitacoes'],['Regras e contatos','regras']]){
     const a=link(label,`#${to}`);
-    if(current===to || (to==='consultas' && (current.startsWith('consulta/') || current.startsWith('gestao/'))))a.setAttribute('aria-current','page');
+    if(current===to || (to==='limpeza' && current.startsWith('limpeza/')) || (to==='consultas' && (current.startsWith('consulta/') || current.startsWith('gestao/'))))a.setAttribute('aria-current','page');
     nav.append(a);
   }
   navigation.replaceChildren(nav);
@@ -393,6 +478,16 @@ function draw() {
     page=survey ? detail(survey) : heading('Consulta não encontrada','A consulta não está disponível. Use a navegação para voltar à lista.');
   } else if(current==='acompanhamento')page=tracking();
   else if(current==='regras')page=resources();
+  else if(current==='solicitacoes') {
+    page=model.admin ? heading('Área exclusiva do morador', 'Use Fila de limpeza para consultar e concluir ordens.') : requestsPage();
+  } else if(current==='limpeza' || current.startsWith('limpeza/')) {
+    if (!model.admin) page=heading('Área exclusiva da gestão','Use Minhas solicitações para acompanhar os protocolos da sua residência.');
+    else if(current==='limpeza') page=cleaningQueue();
+    else {
+      const item=model.requests.find(item => `limpeza/${item.protocol}`===current);
+      page=item ? cleaningDetail(item) : heading('Ordem não encontrada','Use Fila de limpeza para consultar as ordens disponíveis.');
+    }
+  }
   else if(current==='gestao/nova' || current==='gestao/convites'){
     page=model.admin ? (current==='gestao/nova' ? createSurvey() : invites()) : heading('Área exclusiva da gestão','Use Consultas para participar e Acompanhamento para conferir os retornos.');
   } else {

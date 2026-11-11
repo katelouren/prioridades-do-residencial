@@ -11,6 +11,7 @@ from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
+from solicitacoes import criar_tabelas, criar_solicitacao, listar_solicitacoes, listar_fila_limpeza, concluir_ordem
 
 ROOT = Path(__file__).resolve().parent
 DATABASE = os.environ.get("RESIDENCIAL_DB", str(ROOT / "residencial.sqlite3"))
@@ -75,6 +76,7 @@ def init():
             db.execute("UPDATE votes SET residence_id=(SELECT residence_id FROM invites WHERE code_hash=votes.invite) WHERE residence_id IS NULL")
             db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_active_code ON invites(residence_id) WHERE active=1")
             db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_participation ON votes(survey,residence_id)")
+            criar_tabelas(db)
             for table in ("invites", "votes"):
                 for operation in ("INSERT", "UPDATE"):
                     db.execute(f"CREATE TRIGGER IF NOT EXISTS {table}_residence_{operation} BEFORE {operation} ON {table} WHEN NEW.residence_id IS NULL BEGIN SELECT RAISE(ABORT, 'residence required'); END")
@@ -208,6 +210,33 @@ class Handler(BaseHTTPRequestHandler):
             ).fetchone():
                 self.error(401, "Use um código de acesso válido.")
                 return
+            if self.command == "GET":
+                request_match = re.fullmatch(r"/api/requests/(SOL-[A-F0-9]{12})", path)
+                cleaning_match = re.fullmatch(r"/api/cleaning/(SOL-[A-F0-9]{12})", path)
+                if path == "/api/requests" or request_match:
+                    if admin:
+                        self.error(403, "Use a fila de limpeza no perfil da gestão.")
+                        return
+                    residence = db.execute("SELECT residence_id FROM invites WHERE code_hash=? AND active=1", (hashed,)).fetchone()
+                    if residence is None:
+                        self.error(401, "Use um código de acesso válido.")
+                        return
+                    rows = listar_solicitacoes(db, residence["residence_id"], request_match[1] if request_match else None)
+                    if request_match and not rows:
+                        self.error(404, "Solicitação não encontrada para esta residência.")
+                    else:
+                        self.send(200, {"request": rows[0]} if request_match else {"requests": rows})
+                    return
+                if path == "/api/cleaning" or cleaning_match:
+                    if not admin:
+                        self.error(403, "A fila de limpeza é exclusiva da gestão.")
+                        return
+                    rows = listar_fila_limpeza(db, cleaning_match[1] if cleaning_match else None)
+                    if cleaning_match and not rows:
+                        self.error(404, "Ordem de serviço não encontrada.")
+                    else:
+                        self.send(200, {"order": rows[0]} if cleaning_match else {"orders": rows})
+                    return
             if self.command == "GET" and path == "/api/surveys":
                 payload = {"name": NAME, "admin": admin, "surveys": list_surveys(db, hashed)}
                 if admin:
@@ -233,6 +262,8 @@ class Handler(BaseHTTPRequestHandler):
                         raise PermissionError()
                     payload = self.mutate(db, path, data, admin, hashed)
                 self.send(200, payload)
+            except sqlite3.DatabaseError:
+                self.error(500, "Não foi possível salvar a operação. Nenhuma alteração foi confirmada. Tente novamente.")
             except PermissionError:
                 self.error(403, "Esta ação não está disponível para seu perfil.")
             except LookupError:
@@ -242,6 +273,21 @@ class Handler(BaseHTTPRequestHandler):
                 self.error(400, message)
 
     def mutate(self, db, path, data, admin, hashed):
+        if path == "/api/requests":
+            if admin:
+                raise PermissionError()
+            # A residência vem do código autenticado, nunca do corpo do formulário.
+            residence = db.execute("SELECT residence_id FROM invites WHERE code_hash=? AND active=1", (hashed,)).fetchone()
+            if residence is None:
+                raise PermissionError()
+            request = criar_solicitacao(db, residence["residence_id"], data.get("local"),
+                                       data.get("category"), data.get("description"))
+            return {"request": request}
+        complete = re.fullmatch(r"/api/cleaning/(SOL-[A-F0-9]{12})/complete", path)
+        if complete:
+            if not admin:
+                raise PermissionError()
+            return {"order": concluir_ordem(db, complete[1], data.get("feedback"))}
         if path in ("/api/invites", "/api/surveys") and not admin:
             raise PermissionError()
         if path == "/api/invites":

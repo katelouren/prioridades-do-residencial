@@ -203,3 +203,24 @@ footer { max-width:1120px; padding:1.2rem 1.5rem; margin:auto; border-top:1px so
 }
 
 @media(min-width:641px) { .summary-facts { grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; } }
+
+/* Automação local de limpeza: os mesmos componentes do portal. */
+.service-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:1.25rem; align-items:start; }
+.service-layout>* { min-width:0; }
+.service-list>h2 { margin:.25rem 0 1rem; }
+.service-list .card { margin-bottom:1rem; }
+.service-context { color:var(--muted); font-size:.85rem; margin:.8rem 0; }
+.service-description { white-space:pre-wrap; }
+.service-feedback { margin-top:1rem; padding:1rem; border-radius:8px; background:var(--blue); }
+.service-feedback h3 { margin-top:0; }
+.service-feedback p { white-space:pre-wrap; }
+.service-refresh { margin:-.3rem 0 1.3rem; }
+.service-refresh button { justify-self:start; width:auto; background:white; border-color:#b6c5da; color:var(--navy); }
+input[readonly] { background:#edf3fa; color:#40526c; }
+.order-card .primary { margin-top:.75rem; }
+.request-card h2,.order-card h2 { font-size:1rem; overflow-wrap:anywhere; }
+@media(max-width:640px) {
+  .portal-nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 1rem; }
+  .portal-nav a { min-height:44px; }
+  .service-layout { grid-template-columns:1fr; }
+}
