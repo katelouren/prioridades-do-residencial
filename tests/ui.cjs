@@ -36,15 +36,17 @@ async function stop() {
   const login=async code=>{
     await page.getByLabel('Código de acesso',{exact:true}).fill(code);
     await page.keyboard.press('Tab');await page.keyboard.press('Enter');
-    await page.getByRole('navigation',{name:'Navegação do portal'}).waitFor();await overflow();
+    await page.waitForFunction(()=>Boolean(document.querySelector('#navigation nav')));
+    if(await page.getByRole('button',{name:'Agora não',exact:true}).isVisible())await page.getByRole('button',{name:'Agora não',exact:true}).click();await overflow();
   };
-  const logout=async()=>{await page.getByRole('button',{name:'Sair',exact:true}).click();};
-  const nav=async name=>{await page.getByRole('navigation').getByRole('link',{name,exact:true}).click();await page.getByRole('heading',{level:1,name:name==='Consultas' ? /^(Consultas do residencial|Painel da gestão)$/ : name,exact:true}).waitFor();};
+  const logout=async()=>{if(!await page.getByRole('button',{name:'Sair',exact:true}).isVisible())await page.getByRole('button',{name:'Menu',exact:true}).click();await page.getByRole('button',{name:'Sair',exact:true}).click();};
+  const nav=async name=>{if(await page.getByRole('button',{name:'Menu',exact:true}).isVisible() && await page.getByRole('button',{name:'Menu',exact:true}).getAttribute('aria-expanded')==='false')await page.getByRole('button',{name:'Menu',exact:true}).click();await page.getByRole('navigation').getByRole('link',{name,exact:true}).click();await page.getByRole('heading',{level:1,name:name==='Consultas' ? /^(Consultas do residencial|Consultas)$/ : name,exact:true}).waitFor();};
   const open=async title=>{
     const card=page.locator('.survey-summary').filter({has:page.getByRole('heading',{name:title,exact:true})});
+    if(!await card.count())await nav('Consultas');
     await card.locator('a.primary').click();await page.getByRole('heading',{level:1,name:title,exact:true}).waitFor();await overflow();
   };
-  const back=async()=>{await page.getByRole('link',{name:'Voltar às consultas',exact:true}).first().click();await page.getByRole('heading',{level:1,name:/^(Consultas do residencial|Painel da gestão)$/}).waitFor();};
+  const back=async()=>{await page.getByRole('link',{name:'Voltar às consultas',exact:true}).first().click();await page.getByRole('heading',{level:1,name:/^(Consultas do residencial|Consultas)$/}).waitFor();};
   await page.goto(url);await screenshot('login-mobile');await login('demo-morador-1');
   await page.getByRole('heading',{level:1,name:'Consultas do residencial',exact:true}).waitFor();
   assert.equal(await page.locator('fieldset').count(),0,'Lista não apresenta formulários de votação');

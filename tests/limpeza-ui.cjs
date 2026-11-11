@@ -31,10 +31,11 @@ async function stop() {
   const login=async code=>{
     await page.getByLabel('Código de acesso',{exact:true}).fill(code);
     await page.getByRole('button',{name:'Entrar',exact:true}).click();
-    await page.getByRole('navigation',{name:'Navegação do portal'}).waitFor();
+    await page.waitForFunction(()=>Boolean(document.querySelector('#navigation nav')));
+    if(await page.getByRole('button',{name:'Agora não',exact:true}).isVisible())await page.getByRole('button',{name:'Agora não',exact:true}).click();
   };
-  const logout=async()=>{await page.getByRole('button',{name:'Sair',exact:true}).click();};
-  const nav=async name=>{await page.getByRole('navigation').getByRole('link',{name,exact:true}).click();await page.getByRole('heading',{level:1,name,exact:true}).waitFor();};
+  const logout=async()=>{if(!await page.getByRole('button',{name:'Sair',exact:true}).isVisible())await page.getByRole('button',{name:'Menu',exact:true}).click();await page.getByRole('button',{name:'Sair',exact:true}).click();};
+  const nav=async name=>{if(await page.getByRole('button',{name:'Menu',exact:true}).isVisible() && await page.getByRole('button',{name:'Menu',exact:true}).getAttribute('aria-expanded')==='false')await page.getByRole('button',{name:'Menu',exact:true}).click();await page.getByRole('navigation').getByRole('link',{name,exact:true}).click();await page.getByRole('heading',{level:1,name,exact:true}).waitFor();};
   const capture=async name=>{fs.mkdirSync(path.join(__dirname,'../docs/screenshots'),{recursive:true});await page.screenshot({path:path.join(__dirname,`../docs/screenshots/${name}.png`),fullPage:true});};
   await page.goto(url);await login('demo-morador-1');await nav('Minhas solicitações');
   assert.ok(await page.getByText('Você ainda não tem solicitações.',{exact:true}).isVisible());
