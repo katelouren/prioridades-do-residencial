@@ -1,0 +1,45 @@
+# Dados locais do residencial (incluindo journal, WAL e SHM)
+*.sqlite
+*.sqlite3
+*.db
+*.sqlite-*
+*.sqlite3-*
+*.db-*
+
+# Configurações e credenciais locais
+.env
+.env.*
+*.env
+.aws/
+.codex/
+.agents/
+
+# Identificação acadêmica: somente na entrega local à FIAP
+/entrega-fiap/
+/equipe.txt
+*.zip
+
+# Python / Node e ambientes locais
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+node_modules/
+.cache/
+
+# Arquivos de sistema, editores e temporários
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+/tmp/
+/temp/
