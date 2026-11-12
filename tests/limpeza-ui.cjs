@@ -84,6 +84,7 @@ async function stop() {
   await logout();await login('demo-morador-2');await nav('Minhas solicitações');
   assert.equal(await page.locator('.request-card').count(),0);
   // Regressão local da GS2 na mesma base: ainda é possível participar das consultas.
+  if(await page.getByRole('button',{name:'Menu',exact:true}).getAttribute('aria-expanded')==='false')await page.getByRole('button',{name:'Menu',exact:true}).click();
   await page.getByRole('navigation').getByRole('link',{name:'Consultas',exact:true}).click();
   const survey=page.locator('.survey-summary').filter({hasText:'Formato e decoração de um evento'});
   await survey.getByRole('link',{name:'Responder',exact:true}).click();

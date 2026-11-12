@@ -38,7 +38,7 @@ function message(text = '', error = false) {
 }
 function focusPage() {
   document.querySelector('#main').focus();
-  if(model?.admin)window.scrollTo(0,0);
+  if(model)window.scrollTo(0,0);
 }
 async function api(path, data, access = code) {
   const generation = sessionGeneration;
@@ -107,7 +107,7 @@ function trackingState(survey) {
   return ['Em análise','Em andamento','Concluído'].includes(survey.subject_status) ? survey.subject_status : 'Retorno publicado';
 }
 function login() {
-  resetAdminShell();
+  resetSystemShell();
   model = null;
   navigation.replaceChildren();
   logout.hidden = true;
@@ -115,13 +115,15 @@ function login() {
   document.querySelector('#residential-name').textContent = 'Participar e acompanhar';
   const layout = el('div', undefined, {class:'login-layout'});
   const intro = el('section', undefined, {class:'welcome'});
-  intro.append(el('p', 'GS2 / CITIZENTECH', {class:'eyebrow'}), el('h1', 'Sua opinião conta. O retorno também.'),
-    el('p', 'Participe das consultas do residencial e acompanhe o que a gestão decidiu fazer com as contribuições.'));
-  const steps = el('ol', undefined, {class:'steps'});
-  for (const [title, text] of [['Consulte','Conheça a proposta.'],['Participe','Registre sua preferência.'],['Acompanhe','Veja o resultado e o retorno.']]) {
-    const item = el('li'); item.append(el('strong', title), el('span', text)); steps.append(item);
+  intro.append(el('p', 'SISTEMA DO RESIDENCIAL', {class:'eyebrow'}), el('h1', 'Prioridades do Residencial'),
+    el('p', 'Entre com seu código para acessar as ferramentas disponíveis para o seu perfil.'));
+  const guides=el('div',undefined,{class:'login-guides'});
+  for(const [title,text] of [
+    ['Para moradores','Participe de consultas, veja as decisões da gestão e acompanhe seus pedidos de limpeza pelo protocolo.'],
+    ['Para gestores','Publique consultas, distribua os códigos de acesso, trate as pendências e informe os próximos passos aos moradores.']]) {
+    const item=el('section');item.append(el('h2',title),el('p',text));guides.append(item);
   }
-  intro.append(steps);
+  intro.append(guides);
   const box = panel('Acessar o portal', 2, 'login-card');
   box.append(el('p', 'Use seu código de morador ou de gestão. O perfil é identificado ao entrar.', {class:'quiet'}));
   const form = el('form');
@@ -131,7 +133,7 @@ function login() {
     const data = await loadModel(candidate);
     sessionGeneration += 1;
     code = candidate; model = data;
-    if (data.admin && !location.hash) history.replaceState(null, '', '#visao-geral');
+    if (!location.hash) history.replaceState(null, '', data.admin ? '#visao-geral' : '#inicio');
     draw(); focusPage();
     if (data.admin && !introDismissed()) showAdminIntro();
   });
@@ -464,13 +466,55 @@ function cleaningDetail(item) {
   }
   return container;
 }
-// Interface administrativa: não muda a autenticação nem os registros no servidor.
-let adminMenuOpen = false;
+function usageGuide(admin) {
+  const box=panel('Como usar o sistema',2,'usage-guide');
+  box.querySelector('h2').id='usage-guide-heading';box.querySelector('h2').setAttribute('tabindex','-1');
+  box.append(el('p',admin ? 'Da consulta ao retorno: siga estas etapas para manter os moradores informados.' : 'Escolha uma área no menu à esquerda. Veja o que você pode fazer em cada uma.',{class:'quiet'}));
+  const grid=el('div',undefined,{class:'guide-grid'});
+  const steps=admin ? [
+    ['Crie uma consulta','Apresente a proposta, o prazo e as opções para ouvir as residências.','Abrir Consultas','#consultas'],
+    ['Convide os moradores','Gere um código para cada residência e compartilhe-o em particular.','Convidar residências','#gestao/convites'],
+    ['Encerre e dê retorno','Encerre a votação e publique a decisão, o próximo passo e a data do próximo retorno.','Ver Devolutivas','#devolutivas']
+  ] : [
+    ['Participe das consultas','Leia a proposta, escolha uma opção por pergunta e confirme. Cada residência participa uma vez.','Ver consultas abertas','#consultas'],
+    ['Acompanhe as decisões','Após o encerramento, confira os resultados, a decisão da gestão e o próximo retorno.','Ver resultados e retornos','#acompanhamento'],
+    ['Peça a limpeza da academia','Descreva a necessidade em Minhas solicitações. Guarde o protocolo para acompanhar o atendimento.','Abrir minhas solicitações','#solicitacoes'],
+    ['Encontre regras e contatos','Consulte os documentos disponíveis e o canal responsável por cada assunto.','Consultar regras e contatos','#regras']
+  ];
+  steps.forEach(([title,text,label,to],index)=>{
+    const item=el('section',undefined,{class:'guide-step'});item.append(el('span',String(index+1).padStart(2,'0'),{class:'guide-number','aria-hidden':'true'}),el('h3',title),el('p',text),link(label,to));grid.append(item);
+  });
+  box.append(grid);return box;
+}
+function residentHome() {
+  const container=el('div',undefined,{class:'resident-home'});
+  container.append(heading('Início','Participe das decisões e acompanhe o atendimento da sua residência.','ÁREA DO MORADOR'));
+  const metrics=el('div',undefined,{class:'admin-metrics','aria-label':'Resumo da residência'});
+  for(const [title,count] of [
+    ['Consultas para responder',model.surveys.filter(s=>!s.closed && !s.voted).length],
+    ['Minhas solicitações pendentes',model.requests.filter(r=>r.status==='Pendente').length],
+    ['Retornos publicados',model.surveys.filter(s=>s.closed && s.response).length]]) {
+    const item=el('div',undefined,{class:'admin-metric'});item.append(el('p',title),el('strong',String(count)));metrics.append(item);
+  }
+  container.append(metrics,usageGuide(false));
+  const updates=panel('Consultas abertas',2,'home-updates');
+  const opened=model.surveys.filter(s=>!s.closed);
+  if(!opened.length)updates.append(el('p','Não há consultas abertas no momento.',{class:'quiet'}));
+  for(const survey of opened) {
+    const row=el('div',undefined,{class:'home-update-row'});const text=el('div');
+    text.append(el('h3',survey.title),el('p',survey.voted ? 'Sua participação já está registrada.' : `Prazo de participação: ${formatDate(survey.deadline)}`,{class:'quiet'}));
+    row.append(text,link(survey.voted ? 'Acompanhar consulta' : 'Responder',`#consulta/${survey.id}`,'secondary'));updates.append(row);
+  }
+  container.append(updates);return container;
+}
+// Estrutura do sistema compartilhada; opções e permissões continuam separadas por perfil.
+
+let systemMenuOpen = false;
 let introState = null;
 const INTRO_KEY = 'pr-gestao-introducao';
 const adminDialog = document.querySelector('#admin-intro');
 const adminMenu = document.querySelector('#admin-menu');
-function adminMobile() { return matchMedia('(max-width: 760px)').matches; }
+function systemMobile() { return matchMedia('(max-width: 760px)').matches; }
 function adminIcon(name) {
   const paths = {
     home:'M3 10 12 3l9 7v11h-6v-7H9v7H3Z',
@@ -484,29 +528,33 @@ function adminIcon(name) {
   for(const [key,value] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.7','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true',focusable:'false'}))svg.setAttribute(key,value);
   const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',paths[name] || paths.home);svg.append(path);return svg;
 }
-function setAdminMenu(open, focus = false) {
-  adminMenuOpen = Boolean(open && model?.admin && adminMobile());
-  document.body.classList.toggle('admin-menu-open',adminMenuOpen);
-  adminMenu.setAttribute('aria-expanded',String(adminMenuOpen));
-  document.querySelector('#admin-backdrop').hidden=!adminMenuOpen;
-  document.querySelector('#main').inert=adminMenuOpen;
+function setSystemMenu(open, focus = false) {
+  systemMenuOpen = Boolean(open && model && systemMobile());
+  document.body.classList.toggle('admin-menu-open',systemMenuOpen);
+  adminMenu.setAttribute('aria-expanded',String(systemMenuOpen));
+  document.querySelector('#admin-backdrop').hidden=!systemMenuOpen;
+  document.querySelector('#main').inert=systemMenuOpen;
   if(focus) {
-    if(adminMenuOpen)navigation.querySelector('a')?.focus();
+    if(systemMenuOpen)navigation.querySelector('a')?.focus();
     else adminMenu.focus();
   }
 }
-function resetAdminShell() {
+function resetSystemShell() {
   if(introState) dismissAdminIntro(false);
-  document.body.classList.remove('admin','admin-menu-open','admin-touring');
+  document.body.classList.remove('app-shell','admin','resident','admin-menu-open','admin-touring');
   document.querySelector('#admin-header').hidden=true;
   document.querySelector('#admin-backdrop').hidden=true;
   document.querySelector('#main').inert=false;
   navigation.className='';navigation.removeAttribute('aria-label');
   document.querySelector('.account').append(logout);
   logout.className='header-button';
-  adminMenuOpen=false;adminMenu.setAttribute('aria-expanded','false');
+  systemMenuOpen=false;adminMenu.setAttribute('aria-expanded','false');
 }
-function adminSection(current) {
+function systemSection(current) {
+  if(!model.admin) {
+    if(current.startsWith('consulta/'))return 'consultas';
+    return ['inicio','consultas','acompanhamento','solicitacoes','regras'].includes(current) ? current : 'inicio';
+  }
   if(current==='gestao/convites')return 'convites';
   if(current==='devolutivas' || current==='acompanhamento')return 'devolutivas';
   if(current.startsWith('limpeza'))return 'limpeza';
@@ -516,32 +564,45 @@ function adminSection(current) {
   }
   return current==='consultas' || current==='gestao/nova' ? 'consultas' : 'visao-geral';
 }
-function renderAdminShell(current) {
-  document.body.classList.add('admin');navigation.className='admin-sidebar';navigation.setAttribute('aria-label','Painel da gestão');
+function renderSystemShell(current) {
+  document.body.classList.add('app-shell');
+  document.body.classList.toggle('admin',model.admin);document.body.classList.toggle('resident',!model.admin);
+  navigation.className='admin-sidebar';navigation.setAttribute('aria-label',model.admin ? 'Painel da gestão' : 'Área do morador');
   document.querySelector('#admin-header').hidden=false;
-  const active=adminSection(current);
-  const labels={'visao-geral':'Visão geral',consultas:'Consultas',devolutivas:'Devolutivas',convites:'Convites',limpeza:'Fila de limpeza'};
+  const active=systemSection(current);
+  const labels={'visao-geral':'Visão geral',consultas:'Consultas',devolutivas:'Devolutivas',convites:'Convites',limpeza:'Fila de limpeza',inicio:'Início',acompanhamento:'Acompanhamento',solicitacoes:'Minhas solicitações',regras:'Regras e contatos'};
   document.querySelector('#admin-section-name').textContent=labels[active];
+  document.querySelector('.admin-header-profile').textContent=model.admin ? 'Gestão · Demonstração' : 'Morador · Demonstração';
   const brand=el('div',undefined,{class:'sidebar-brand'});
   const name=el('div');name.append(el('strong','Prioridades do Residencial'),el('small',model.name));
   brand.append(el('span','PR',{class:'brand-mark','aria-hidden':'true'}),name);
   const nav=el('nav',undefined,{'aria-label':'Navegação do portal',class:'admin-nav'});
-  for(const [label,section,to,icon] of [
+  const sections=model.admin ? [
     ['Visão geral','visao-geral','visao-geral','home'],['Consultas','consultas','consultas','surveys'],
     ['Devolutivas','devolutivas','devolutivas','response'],['Convites','convites','gestao/convites','invites'],
-    ['Fila de limpeza','limpeza','limpeza','cleaning']]) {
+    ['Fila de limpeza','limpeza','limpeza','cleaning']] : [
+    ['Início','inicio','inicio','home'],['Consultas','consultas','consultas','surveys'],
+    ['Acompanhamento','acompanhamento','acompanhamento','response'],
+    ['Minhas solicitações','solicitacoes','solicitacoes','cleaning'],['Regras e contatos','regras','regras','surveys']];
+  for(const [label,section,to,icon] of sections) {
     const item=link('',`#${to}`);item.append(adminIcon(icon),el('span',label));item.setAttribute('data-admin-section',section);
     if(section===active)item.setAttribute('aria-current','page');
-    item.addEventListener('click',()=>{setAdminMenu(false);if(route()===to)focusPage();});nav.append(item);
+    item.addEventListener('click',()=>{setSystemMenu(false);if(route()===to)focusPage();});nav.append(item);
   }
   const foot=el('div',undefined,{class:'sidebar-footer'});
-  const help=el('button',undefined,{type:'button',id:'admin-help',class:'sidebar-help'});
-  help.append(adminIcon('help'),el('span','Como usar o painel'));
-  help.addEventListener('click',()=>showAdminIntro(help));
+  const help=el('button',undefined,{type:'button',id:model.admin ? 'admin-help' : 'resident-help',class:'sidebar-help'});
+  help.append(adminIcon('help'),el('span',model.admin ? 'Como usar o painel' : 'Como usar o sistema'));
+  help.addEventListener('click',()=>{
+    if(model.admin)showAdminIntro(help);
+    else {
+      setSystemMenu(false);history.replaceState(null,'','#inicio');draw();focusPage();
+      const guide=document.querySelector('#usage-guide-heading');guide.focus({preventScroll:true});guide.scrollIntoView({block:'start'});
+    }
+  });
   logout.className='sidebar-logout';
   foot.append(help,logout,el('small','Ambiente de demonstração'));
-  navigation.replaceChildren(brand,el('p','GESTÃO DO RESIDENCIAL',{class:'sidebar-caption'}),nav,foot);
-  setAdminMenu(adminMenuOpen);
+  navigation.replaceChildren(brand,el('p',model.admin ? 'ÁREA DA GESTÃO' : 'ÁREA DO MORADOR',{class:'sidebar-caption'}),nav,foot);
+  setSystemMenu(systemMenuOpen);
 }
 function adminOverview() {
   const container=el('div',undefined,{class:'admin-overview'});
@@ -568,7 +629,7 @@ function adminOverview() {
     const text=el('div');text.append(badge(item.kind==='cleaning'?'Limpeza pendente':'Aguardando devolutiva'),el('h3',item.title),el('p',item.description));
     row.append(text,link(item.label,item.href,'secondary'));attention.append(row);
   }
-  container.append(attention);return container;
+  container.append(attention,usageGuide(true));return container;
 }
 function introDismissed() {
   try { return localStorage.getItem(INTRO_KEY)==='dispensada'; } catch { return false; }
@@ -578,7 +639,7 @@ function rememberIntro() {
 }
 function showAdminIntro(origin = document.querySelector('#main')) {
   if(!model?.admin)return;
-  introState={mode:'welcome',step:0,originId:origin.id || 'main',originMenu:adminMenuOpen};
+  introState={mode:'welcome',step:0,originId:origin.id || 'main',originMenu:systemMenuOpen};
   renderAdminIntro();
 }
 function dismissAdminIntro(restore = true) {
@@ -587,11 +648,11 @@ function dismissAdminIntro(restore = true) {
   document.querySelectorAll('.tour-target').forEach(node=>node.classList.remove('tour-target'));
   document.body.classList.remove('admin-touring');
   if(adminDialog.open)adminDialog.close();
-  setAdminMenu(restore && previous.originMenu);
+  setSystemMenu(restore && previous.originMenu);
   if(restore) {
     const origin=document.getElementById(previous.originId);
     const visible=origin && origin.getClientRects().length && getComputedStyle(origin).visibility!=='hidden' && !origin.closest('[inert]');
-    (visible ? origin : adminMobile() ? adminMenu : document.querySelector('#main')).focus();
+    (visible ? origin : systemMobile() ? adminMenu : document.querySelector('#main')).focus();
   }
 }
 function startAdminTour() {
@@ -619,7 +680,7 @@ function renderAdminIntro() {
       {title:'Devolutivas',text:'Depois do encerramento, publique a decisão e informe o próximo passo.',selector:'[data-admin-section="devolutivas"]'}
     ];
     const step=steps[introState.step];title.textContent=step.title;text.textContent=step.text;
-    if(adminMobile())setAdminMenu(introState.step!==1);
+    if(systemMobile())setSystemMenu(introState.step!==1);
     if(introState.step>0)controls.append(makeButton('Voltar',()=>{introState.step--;renderAdminIntro();},'secondary'));
     const next=makeButton(introState.step===2?'Concluir tour':'Avançar',()=>{if(introState.step===2)dismissAdminIntro();else{introState.step++;renderAdminIntro();}});next.id='intro-next';controls.append(next);
     adminDialog.replaceChildren(close,el('p',`${introState.step+1} de 3`,{class:'tour-progress','aria-live':'polite'}),title,text,controls);
@@ -637,13 +698,13 @@ adminDialog.addEventListener('keydown',event=>{
   else if(!event.shiftKey && (document.activeElement===last || !adminDialog.contains(document.activeElement))){event.preventDefault();first?.focus();}
 });
 adminDialog.addEventListener('cancel',event=>{event.preventDefault();dismissAdminIntro();});
-adminMenu.addEventListener('click',()=>setAdminMenu(!adminMenuOpen,true));
-document.querySelector('#admin-backdrop').addEventListener('click',()=>setAdminMenu(false,true));
-document.addEventListener('keydown',event=>{if(event.key==='Escape' && adminMenuOpen && !adminDialog.open){event.preventDefault();setAdminMenu(false,true);}});
+adminMenu.addEventListener('click',()=>setSystemMenu(!systemMenuOpen,true));
+document.querySelector('#admin-backdrop').addEventListener('click',()=>setSystemMenu(false,true));
+document.addEventListener('keydown',event=>{if(event.key==='Escape' && systemMenuOpen && !adminDialog.open){event.preventDefault();setSystemMenu(false,true);}});
 matchMedia('(max-width: 760px)').addEventListener('change',()=>{
-  if(!model?.admin)return;
-  const sidebarFocus=adminMobile() && navigation.contains(document.activeElement);
-  setAdminMenu(false);
+  if(!model)return;
+  const sidebarFocus=systemMobile() && navigation.contains(document.activeElement);
+  setSystemMenu(false);
   if(introState?.mode==='tour')renderAdminIntro();
   else if(sidebarFocus && !adminDialog.open)adminMenu.focus();
 });
@@ -654,23 +715,14 @@ function draw() {
   document.querySelector('#residential-name').textContent=model.name;
   const profile=document.querySelector('#profile');profile.hidden=false;profile.textContent=model.admin?'Gestão':'Morador';
   const current=route();
-  const nav=el('nav',undefined,{'aria-label':'Navegação do portal',class:'portal-nav'});
-  for(const [label,to] of [['Consultas','consultas'],['Acompanhamento','acompanhamento'],[model.admin ? 'Fila de limpeza' : 'Minhas solicitações',model.admin ? 'limpeza' : 'solicitacoes'],['Regras e contatos','regras']]){
-    const a=link(label,`#${to}`);
-    if(current===to || (to==='limpeza' && current.startsWith('limpeza/')) || (to==='consultas' && (current.startsWith('consulta/') || current.startsWith('gestao/'))))a.setAttribute('aria-current','page');
-    nav.append(a);
-  }
-  if (model.admin) renderAdminShell(current);
-  else {
-    resetAdminShell();
-    navigation.replaceChildren(nav);
-  }
+  renderSystemShell(current);
   let page;
   const match=current.match(/^consulta\/([0-9]{1,12})$/);
   if(match){
     const survey=model.surveys.find(s=>s.id===Number(match[1]));
     page=survey ? detail(survey) : heading('Consulta não encontrada','A consulta não está disponível. Use a navegação para voltar à lista.');
-  } else if(current==='visao-geral') page=model.admin ? adminOverview() : heading('Área exclusiva da gestão','Use Consultas para participar e acompanhar os resultados.');
+  } else if(current==='inicio' && !model.admin)page=residentHome();
+  else if(current==='visao-geral') page=model.admin ? adminOverview() : heading('Área exclusiva da gestão','Use Consultas para participar e acompanhar os resultados.');
   else if(current==='devolutivas') page=model.admin ? tracking('Devolutivas') : heading('Área exclusiva da gestão','Use Acompanhamento para consultar os retornos.');
   else if(current==='acompanhamento')page=tracking(model.admin ? 'Devolutivas' : 'Acompanhamento');
   else if(current==='regras')page=resources();
@@ -687,8 +739,8 @@ function draw() {
   else if(current==='gestao/nova' || current==='gestao/convites'){
     page=model.admin ? (current==='gestao/nova' ? createSurvey() : invites()) : heading('Área exclusiva da gestão','Use Consultas para participar e Acompanhamento para conferir os retornos.');
   } else {
-    if(current!=='consultas') history.replaceState(null,'',model.admin ? '#visao-geral' : '#consultas');
-    page=model.admin && current!=='consultas' ? adminOverview() : dashboard();
+    if(current!=='consultas') history.replaceState(null,'',model.admin ? '#visao-geral' : '#inicio');
+    page=current==='consultas' ? dashboard() : model.admin ? adminOverview() : residentHome();
   }
   content.replaceChildren(page);
   document.title=`${content.querySelector('h1').textContent} · Prioridades do Residencial`;

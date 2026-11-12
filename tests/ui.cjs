@@ -47,7 +47,7 @@ async function stop() {
     await card.locator('a.primary').click();await page.getByRole('heading',{level:1,name:title,exact:true}).waitFor();await overflow();
   };
   const back=async()=>{await page.getByRole('link',{name:'Voltar às consultas',exact:true}).first().click();await page.getByRole('heading',{level:1,name:/^(Consultas do residencial|Consultas)$/}).waitFor();};
-  await page.goto(url);await screenshot('login-mobile');await login('demo-morador-1');
+  await page.goto(url);await screenshot('login-mobile');await login('demo-morador-1');await nav('Consultas');
   await page.getByRole('heading',{level:1,name:'Consultas do residencial',exact:true}).waitFor();
   assert.equal(await page.locator('fieldset').count(),0,'Lista não apresenta formulários de votação');
   assert.equal(await page.locator('.survey-summary').count(),3);
@@ -121,7 +121,7 @@ async function stop() {
   await login(replacement);await open('Consulta do fluxo completo');
   assert.equal(await page.getByRole('button',{name:'Confirmar participação'}).count(),0);
   // Outro contexto/navegador mantém a regra da residência.
-  const second=await browser.newContext();const p2=await second.newPage();await p2.goto(url);
+  const second=await browser.newContext();const p2=await second.newPage();await p2.goto(url+'#consultas');
   await p2.getByLabel('Código de acesso',{exact:true}).fill(replacement);await p2.getByRole('button',{name:'Entrar',exact:true}).click();
   await p2.locator('.survey-summary').filter({hasText:'Consulta do fluxo completo'}).getByRole('link',{name:'Acompanhar consulta',exact:true}).waitFor();await second.close();
   await logout();await login('demo-gestao');await open('Consulta do fluxo completo');

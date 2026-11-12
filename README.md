@@ -27,13 +27,33 @@ Nesse caso, abra http://127.0.0.1:8001.
 
 O perfil é reconhecido pelo código. Códigos substituídos continuam revogados após reiniciar. Guarde o novo código mostrado pela gestão; para gerar outro, reutilize **exatamente o mesmo identificador da residência**.
 
-## Painel administrativo da gestão
+## Interface do sistema: gestor e morador
 
-A interface administrativa está na branch local **`painel-gestao`**, baseada em `automacao-limpeza`. As branches anteriores mantêm seus commits; `main` continua na versão publicada da GS2. Nenhuma migração ou alteração das permissões do servidor foi necessária para esta interface.
+A versão atual está na branch local **`interface-sistema`**, baseada em `painel-gestao`. A navegação lateral agora é usada pelos **dois perfis**, com ferramentas e permissões diferentes. O menu de categorias não fica mais no topo depois de entrar. O cabeçalho superior é compacto e mostra somente a seção e o perfil. No celular, o botão **Menu** abre a navegação; escolher uma seção fecha o menu e leva o foco ao conteúdo.
+
+- **Morador:** entra em **Início**, com resumo da residência, consultas abertas e o guia **Como usar o sistema**. O menu contém Início, Consultas, Acompanhamento, Minhas solicitações e Regras e contatos. O guia explica como votar, consultar decisões, pedir a limpeza da academia e encontrar documentos/canais, com atalhos reais para essas telas. O botão **Como usar o sistema**, no rodapé do menu, retorna às orientações.
+- **Gestor:** entra em **Visão geral**, com indicadores, pendências e um guia permanente sobre criar consultas, convidar moradores e publicar o retorno. O menu mantém Visão geral, Consultas, Devolutivas, Convites e Fila de limpeza. O tour continua disponível em **Como usar o painel**.
+- **Entrada no sistema:** explica separadamente o que moradores e gestores podem fazer. O código identifica o perfil; não há seleção de permissão no navegador.
+
+Para abrir esta versão no Mac:
 
 ```sh
 cd ~/Downloads/PR-GlobalSolution
-git switch painel-gestao
+git switch interface-sistema
+python3 demo.py
+```
+
+Abra http://127.0.0.1:8000, recarregue com **⌘R** se já estava aberto e entre com `demo-morador-1` ou `demo-gestao`. Para testar a tela inicial correspondente, use o endereço sem fragmento (`#...`) ou saia e entre novamente. Links diretos às consultas e outras seções continuam válidos após autenticar.
+
+Não houve alteração do backend, das permissões ou do schema SQLite. As solicitações continuam privadas por residência e os registros existentes são preservados. A mudança usa `renderSystemShell()`, `residentHome()` e `usageGuide()` em `public/app.js`, com estilos compartilhados para os perfis autenticados em `public/style.css`.
+
+## Painel administrativo da gestão
+
+A interface administrativa foi criada na branch **`painel-gestao`**, baseada em `automacao-limpeza`, e também está disponível na versão atual **`interface-sistema`**. As branches anteriores mantêm seus commits; `main` continua na versão publicada da GS2. Nenhuma migração ou alteração das permissões do servidor foi necessária para esta interface.
+
+```sh
+cd ~/Downloads/PR-GlobalSolution
+git switch interface-sistema
 python3 demo.py
 ```
 
@@ -53,19 +73,19 @@ No primeiro login da gestão neste navegador, aparece “Boas-vindas ao painel d
 
 Somente a preferência `pr-gestao-introducao=dispensada` é guardada no `localStorage`. Código de acesso, dados da residência e progresso do tour não são gravados no navegador. Se o navegador bloquear armazenamento, o painel e o descarte da introdução continuam funcionando; a preferência pode não persistir. A orientação pode ser reaberta a qualquer momento por **Como usar o painel**. Para conferir a apresentação automática de primeiro acesso sem mudar sua preferência atual, use uma janela anônima.
 
-O tour apresenta as ações; não cria, encerra ou publica consultas. **O portal do morador permanece com sua navegação própria**, sem sidebar administrativa, indicadores da gestão ou tour. Endereços diretos para as seções existentes continuam válidos e são retomados após autenticar.
+O tour apresenta as ações; não cria, encerra ou publica consultas. **Cada perfil tem seu próprio menu lateral**: o morador não recebe as opções, os indicadores administrativos ou o tour da gestão. Endereços diretos para as seções existentes continuam válidos e são retomados após autenticar.
 
-Arquivos principais: `public/index.html` contém o cabeçalho compacto e o diálogo; `public/app.js` monta `renderAdminShell()`, `adminOverview()` e o tour em `showAdminIntro()` / `renderAdminIntro()`; `public/style.css` limita o visual administrativo ao perfil da gestão. O teste completo está em `tests/gestao-ui.cjs`. Os prints da Meta mencionados no pedido não estavam disponíveis na pasta; a disposição segue os requisitos descritos e a identidade visual do projeto.
+Arquivos principais: `public/index.html` contém o cabeçalho compacto e o diálogo; `public/app.js` monta `renderSystemShell()`, `adminOverview()` e o tour em `showAdminIntro()` / `renderAdminIntro()`; `public/style.css` compartilha a estrutura lateral entre os perfis, mantendo as opções administrativas restritas à gestão. O teste completo está em `tests/gestao-ui.cjs`. Os prints da Meta mencionados no pedido não estavam disponíveis na pasta; a disposição segue os requisitos descritos e a identidade visual do projeto.
 
 ## Automação local: higiene da academia → ordem de limpeza
 
-A automação foi implementada na branch **`automacao-limpeza`** e também está disponível em **`painel-gestao`**, com solicitações privadas por residência e a fila de limpeza da gestão. A branch `main` mantém a versão publicada da GS2. Esta etapa é local; não configura prazos, alertas, WhatsApp ou agenda externa.
+A automação foi implementada na branch **`automacao-limpeza`** e também está disponível em **`painel-gestao`** e **`interface-sistema`**, com solicitações privadas por residência e a fila de limpeza da gestão. A branch `main` mantém a versão publicada da GS2. Esta etapa é local; não configura prazos, alertas, WhatsApp ou agenda externa.
 
 Para demonstrar no Mac com uma base separada das consultas já utilizadas:
 
 ```sh
 cd ~/Downloads/PR-GlobalSolution
-git switch painel-gestao
+git switch interface-sistema
 RESIDENCIAL_DB=/tmp/pr-limpeza-demo.sqlite3 python3 demo.py
 ```
 
@@ -120,7 +140,7 @@ O servidor rejeita ações de gestão feitas por morador, códigos inválidos/re
 - **Gestão:** telas próprias para criar consulta e gerenciar convites. O detalhe da consulta aberta oferece encerramento com explicação e confirmação; a encerrada oferece publicação/atualização da devolutiva e confirma que ficou disponível para os moradores.
 - **Regras e contatos:** tela própria, com canais por assunto primeiro, documentos do residencial depois e referências gerais ao final. Documentos indisponíveis exibem Aguardando publicação. Os contatos ficam A informar; nenhum dado pessoal é publicado.
 
-A navegação usa endereços simples como `#consultas`, `#consulta/2`, `#acompanhamento` e `#regras`. Voltar/avançar do navegador funciona entre telas. O código continua apenas em memória: **recarregar exige entrar novamente e retoma o endereço aberto**. Sair limpa o acesso e volta para a lista. Endereços de consulta inexistente mostram uma orientação; moradores não acessam tarefas da gestão.
+A navegação usa endereços simples como `#inicio`, `#visao-geral`, `#consultas`, `#consulta/2`, `#acompanhamento` e `#regras`. Voltar/avançar do navegador funciona entre telas. O código continua apenas em memória: **recarregar exige entrar novamente e retoma o endereço aberto**. Sair limpa o acesso e volta à tela de entrada; um novo login sem endereço específico abre a tela inicial do perfil. Endereços de consulta inexistente mostram uma orientação; moradores não acessam tarefas da gestão.
 
 Identidade baseada nos dois PNGs disponíveis em `wireframes/`: azul-marinho, branco, azul-bebê e laranja suave, foco visível e organização em uma coluna no celular. Não há outro wireframe comercial na pasta; a página inicial fornecida orienta a identidade, sem acrescentar uma página comercial nesta etapa.
 
@@ -199,11 +219,12 @@ npm install --prefix /tmp/residencial-browser playwright --no-audit --no-fund
 NODE_PATH=/tmp/residencial-browser/node_modules node tests/ui.cjs
 NODE_PATH=/tmp/residencial-browser/node_modules node tests/limpeza-ui.cjs
 NODE_PATH=/tmp/residencial-browser/node_modules node tests/gestao-ui.cjs
+NODE_PATH=/tmp/residencial-browser/node_modules node tests/sistema-ui.cjs
 ```
 
 `PR_BROWSER=/caminho/do/chromium` seleciona um navegador já instalado. O teste cria/remove sua base temporária e para seu servidor local. Capturas ficam em `docs/screenshots/`. A verificação de navegador usa larguras de 375 e 1280 px; não substitui teste em celular físico ou com leitor de tela.
 
-A suíte Python inclui a automação em `tests/test_solicitacoes.py`: criação vinculada, privacidade por residência, código substituído, validação de dados, conclusão, persistência e migração em cópia. Dois testes provocam falhas reais por triggers SQLite para provar rollback na criação da ordem e na conclusão. `tests/limpeza-ui.cjs` verifica no navegador o roteiro descrito acima, o isolamento do segundo morador, reinício e votação GS2 na mesma base. `tests/gestao-ui.cjs` confere a sidebar, a visão geral com dados reais da base de teste, o estado vazio, criação/encerramento/devolutiva, convites, fila, menu móvel e foco. Também verifica o tour (abrir, dispensar, reabrir, avançar, voltar, Esc), ausência de sobreposição no celular (375 × 812 e 375 × 568), foco após redimensionar, armazenamento bloqueado, alvo ausente e morador sem área administrativa. Os três testes de navegador usam bases temporárias próprias.
+A suíte Python inclui a automação em `tests/test_solicitacoes.py`: criação vinculada, privacidade por residência, código substituído, validação de dados, conclusão, persistência e migração em cópia. Dois testes provocam falhas reais por triggers SQLite para provar rollback na criação da ordem e na conclusão. `tests/limpeza-ui.cjs` verifica no navegador o roteiro descrito acima, o isolamento do segundo morador, reinício e votação GS2 na mesma base. `tests/gestao-ui.cjs` confere a sidebar, a visão geral com dados reais da base de teste, o estado vazio, criação/encerramento/devolutiva, convites, fila, menu móvel e foco. Também verifica o tour (abrir, dispensar, reabrir, avançar, voltar, Esc), ausência de sobreposição no celular (375 × 812 e 375 × 568), foco após redimensionar, armazenamento bloqueado, alvo ausente e morador sem área administrativa. `tests/sistema-ui.cjs` confere a barra lateral e os guias dos dois perfis, a nova tela Início, atalhos, menu móvel, foco e saída. Os quatro testes de navegador usam bases temporárias próprias.
 
 ## Evoluções ainda não implementadas
 

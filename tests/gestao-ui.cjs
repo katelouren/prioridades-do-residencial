@@ -33,7 +33,7 @@ async function stop() {
   };
   const login=async(code='demo-gestao')=>{
     await page.getByLabel('Código de acesso',{exact:true}).fill(code);await page.getByRole('button',{name:'Entrar',exact:true}).click();
-    await page.getByRole('navigation',{name:'Navegação do portal'}).waitFor();
+    await page.waitForFunction(()=>Boolean(document.querySelector('#navigation nav')));
   };
   const overflow=async()=>assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Sem overflow horizontal');
   const capture=async name=>{fs.mkdirSync(path.join(__dirname,'../docs/screenshots'),{recursive:true});await page.screenshot({path:path.join(__dirname,`../docs/screenshots/${name}.png`),fullPage:true});};
@@ -128,10 +128,10 @@ async function stop() {
   for(const survey of surveys.filter(s=>s.closed && !s.response))await api(`/api/surveys/${survey.id}/response`,{response:'Retorno fictício publicado.',next_step:'Acompanhar execução.',subject_status:'Em andamento'});
   await api(`/api/cleaning/${request.request.protocol}/complete`,{feedback:'Limpeza fictícia concluída.'});
   await nav('Visão geral');await page.getByRole('button',{name:'Atualizar painel',exact:true}).click();await page.getByText('Nenhuma pendência no momento',{exact:true}).waitFor();
-  // Morador vê o retorno publicado e não recebe shell, menu ou introdução da gestão.
+  // Morador vê o retorno publicado e recebe sua própria sidebar, sem opções ou introdução da gestão.
   await page.getByRole('button',{name:'Menu',exact:true}).click();await page.getByRole('button',{name:'Sair',exact:true}).click();await login('demo-morador-1');
   assert.equal(await page.locator('body.admin').count(),0);assert.equal(await page.getByRole('button',{name:'Como usar o painel',exact:true}).count(),0);
-  assert.equal(await page.getByRole('button',{name:'Menu',exact:true}).isVisible(),false);
+  assert.equal(await page.getByRole('button',{name:'Menu',exact:true}).isVisible(),true);
   await page.goto(url+'#consulta/'+id);await page.getByText('Decisão publicada pelo novo painel.',{exact:true}).waitFor();await overflow();
   // Se storage estiver bloqueado, o login e o descarte continuam funcionando.
   const blocked=await browser.newContext();await blocked.addInitScript(()=>{Object.defineProperty(window,'localStorage',{get(){throw new Error('Storage indisponível');}});});
