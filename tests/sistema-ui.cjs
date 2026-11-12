@@ -69,7 +69,7 @@ async function stop() {
   await page.locator('.usage-guide').getByRole('link',{name:'Ver Devolutivas',exact:true}).click();await page.getByRole('heading',{level:1,name:'Devolutivas',exact:true}).waitFor();
   await page.getByRole('button',{name:'Sair',exact:true}).click();
   assert.equal(await page.locator('body.app-shell').count(),0);
-  assert.ok(await page.getByText('Para moradores',{exact:true}).isVisible());assert.ok(await page.getByText('Para gestores',{exact:true}).isVisible());
+  assert.ok(await page.getByRole('heading',{level:1,name:'Sua opinião conta. O retorno também.',exact:true}).isVisible());
   assert.deepEqual(errors,[]);
-  console.log('OK: menu lateral e guias permanentes dos dois perfis; início do morador; atalhos reais; menu móvel/Esc/foco; perfis separados; login orientado; 375/1280 sem overflow.');
+  console.log('OK: menu lateral e guias permanentes dos dois perfis; início do morador; atalhos reais; menu móvel/Esc/foco; perfis separados; login restaurado; 375/1280 sem overflow.');
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();await stop();fs.rmSync(tmp,{recursive:true,force:true});});

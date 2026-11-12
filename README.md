@@ -33,7 +33,7 @@ A versão atual está na branch local **`interface-sistema`**, baseada em `paine
 
 - **Morador:** entra em **Início**, com resumo da residência, consultas abertas e o guia **Como usar o sistema**. O menu contém Início, Consultas, Acompanhamento, Minhas solicitações e Regras e contatos. O guia explica como votar, consultar decisões, pedir a limpeza da academia e encontrar documentos/canais, com atalhos reais para essas telas. O botão **Como usar o sistema**, no rodapé do menu, retorna às orientações.
 - **Gestor:** entra em **Visão geral**, com indicadores, pendências e um guia permanente sobre criar consultas, convidar moradores e publicar o retorno. O menu mantém Visão geral, Consultas, Devolutivas, Convites e Fila de limpeza. O tour continua disponível em **Como usar o painel**.
-- **Entrada no sistema:** explica separadamente o que moradores e gestores podem fazer. O código identifica o perfil; não há seleção de permissão no navegador.
+- **Entrada no sistema:** mantém o visual anterior, com “Sua opinião conta. O retorno também.” e os passos Consulte, Participe e Acompanhe. As novas orientações por perfil aparecem depois de entrar.
 
 Para abrir esta versão no Mac:
 

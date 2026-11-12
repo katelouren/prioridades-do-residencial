@@ -115,15 +115,13 @@ function login() {
   document.querySelector('#residential-name').textContent = 'Participar e acompanhar';
   const layout = el('div', undefined, {class:'login-layout'});
   const intro = el('section', undefined, {class:'welcome'});
-  intro.append(el('p', 'SISTEMA DO RESIDENCIAL', {class:'eyebrow'}), el('h1', 'Prioridades do Residencial'),
-    el('p', 'Entre com seu código para acessar as ferramentas disponíveis para o seu perfil.'));
-  const guides=el('div',undefined,{class:'login-guides'});
-  for(const [title,text] of [
-    ['Para moradores','Participe de consultas, veja as decisões da gestão e acompanhe seus pedidos de limpeza pelo protocolo.'],
-    ['Para gestores','Publique consultas, distribua os códigos de acesso, trate as pendências e informe os próximos passos aos moradores.']]) {
-    const item=el('section');item.append(el('h2',title),el('p',text));guides.append(item);
+  intro.append(el('p', 'GS2 / CITIZENTECH', {class:'eyebrow'}), el('h1', 'Sua opinião conta. O retorno também.'),
+    el('p', 'Participe das consultas do residencial e acompanhe o que a gestão decidiu fazer com as contribuições.'));
+  const steps = el('ol', undefined, {class:'steps'});
+  for (const [title, text] of [['Consulte','Conheça a proposta.'],['Participe','Registre sua preferência.'],['Acompanhe','Veja o resultado e o retorno.']]) {
+    const item = el('li'); item.append(el('strong', title), el('span', text)); steps.append(item);
   }
-  intro.append(guides);
+  intro.append(steps);
   const box = panel('Acessar o portal', 2, 'login-card');
   box.append(el('p', 'Use seu código de morador ou de gestão. O perfil é identificado ao entrar.', {class:'quiet'}));
   const form = el('form');

@@ -338,11 +338,6 @@ body.app-shell { padding-left:252px; background:#f4f7fb; }
 .home-update-row h3 { font-size:.92rem; margin:0 0 .5rem; }
 .home-update-row p { font-size:.78rem; margin:0; }
 .home-update-row>a { flex-shrink:0; }
-.login-guides { display:grid; gap:1rem; margin-top:1.5rem; }
-.login-guides section { border-top:1px solid #3b4a68; padding-top:1rem; }
-.login-guides h2 { font-size:1rem; color:var(--baby); margin:0 0 .5rem; }
-.login-guides p { color:#d4e2f3; font-size:.85rem; margin:0; }
-.welcome h1 { font-size:clamp(1.8rem,3vw,2.2rem); }
 @media(max-width:760px) {
   .guide-grid { grid-template-columns:1fr; }
   .home-update-row { flex-direction:column; align-items:start; }
