@@ -202,6 +202,67 @@ HTML/CSS/JavaScript, API HTTP em Python e SQLite. Nenhuma dependência foi adici
 
 O protótipo escuta só em `127.0.0.1` por padrão. Quem acessa o banco pode relacionar respostas à residência; não há promessa de anonimato. Uso pela internet exigiria HTTPS, autenticação individual da gestão, controle de tentativas, expiração, backups, auditoria e política de retenção. Cada instalação representa um único residencial.
 
+## Assistente do morador
+
+Implementado na branch local **`assistente-morador`**, a partir da versão visual atual. A única adição nas telas existentes é o link **Assistente** no fim do menu do morador. Login, Início, Consultas, Regras, solicitações, painel da gestão, tour e estilos globais permanecem iguais. O CSS não precisou ser alterado. O Git estava limpo antes desta etapa; capturas de referência foram feitas antes das mudanças.
+
+A fila de limpeza já existia e foi reutilizada sem mudar nenhuma tela da gestão.
+
+### Abrir e demonstrar no Mac
+
+Pare o servidor antigo com **Control+C** antes de iniciar: os endpoints novos exigem reiniciar o Python, não apenas atualizar o navegador. Para testar sem tocar nos bancos utilizados anteriormente:
+
+```sh
+cd ~/Downloads/PR-GlobalSolution
+git switch assistente-morador
+RESIDENCIAL_DB=/tmp/pr-assistente-demo.sqlite3 python3 demo.py
+```
+
+Abra http://127.0.0.1:8000 e recarregue com **⌘R**. Se precisar manter outro servidor aberto, acrescente `RESIDENCIAL_PORT=8001` e use http://127.0.0.1:8001. Para usar registros antigos, mantenha `RESIDENCIAL_DB` apontando para o arquivo desejado; a migração acrescenta somente a tabela `assistant_drafts` e não reescreve consultas, votos ou chamados.
+
+1. Entre com `demo-morador-1` e abra **Assistente**.
+2. Em **Tirar uma dúvida**, pergunte, por exemplo, “O que foi decidido sobre iluminação?”. A tela mostra a resposta ou os links relevantes, com trechos e acesso à origem. Uma dúvida sem informação publicada recebe essa indicação. Documentos ainda indisponíveis e contatos não publicados não são inventados.
+3. Escolha **Solicitar limpeza**, escreva **A academia está suja** e clique em **Preparar chamado**. Se escrever apenas “Está suja”, será pedido o local; se escrever apenas “Academia”, será pedida a descrição.
+4. Confira o resumo. Local e descrição são editáveis; a equipe de destino é derivada da regra no servidor e não pode ser trocada pelo navegador. **Preparar o resumo ainda não registra uma solicitação nem cria uma OS.**
+5. Clique em **Confirmar chamado**. O protocolo aparece em **Meus chamados**, dentro do assistente, como Pendente. Repetir a confirmação do mesmo resumo retorna o mesmo protocolo, inclusive em cliques concorrentes ou após falha na resposta de rede.
+6. Entre como `demo-gestao`, abra a **Fila de limpeza** existente e conclua a tarefa com **Aparelhos higienizados**.
+7. Volte ao assistente como `demo-morador-1` e use **Atualizar meus chamados**. O mesmo protocolo aparece como Concluída com a devolutiva. `demo-morador-2` não vê o chamado e não consegue acessá-lo diretamente pela API.
+
+O assistente também mostra chamados anteriores da própria residência. O resumo pode ser abandonado sem criar OS. Uma nova preparação gera outro rascunho; a proteção contra duplicação é por confirmação do mesmo rascunho. Não há envio de mensagens, agendamento ou IA com permissão de executar ações.
+
+### IA opcional no servidor
+
+Sem configuração, dúvidas retornam links e trechos relevantes; limpeza e confirmação funcionam normalmente. Para permitir redação por IA, defina **as duas variáveis** no ambiente do processo Python:
+
+- `OPENAI_API_KEY`: chave da sua conta, apenas no servidor.
+- `OPENAI_MODEL`: identificador de um modelo disponível na sua conta e compatível com Responses API.
+
+A aplicação não carrega `.env` automaticamente e não instala dependências adicionais. Não coloque a chave em JavaScript, README ou commit. A integração usa a [Responses API oficial da OpenAI](https://developers.openai.com/api/reference/resources/responses/methods/create), com `store: false`, limite de saída, timeout de 15 segundos e sem ferramentas de execução. Envia somente a dúvida e até cinco trechos relevantes de informações que os moradores já podem consultar. Não envia convites, identificadores de residência, votos individuais, solicitações privadas ou fila da gestão. Resultados e devolutivas de consultas abertas não entram nas fontes.
+
+Os links de origem são construídos pelo servidor a partir do portal, nunca aceitos da IA. Se a IA falhar, não retornar texto ou citar fontes desconhecidas, a resposta volta ao modo de links. A IA é instruída a informar ausência de dados e a não inventar contatos, decisões ou prazos. O assistente não importa o conteúdo integral das leis e não faz interpretação jurídica: aponta para as referências já existentes em Regras e contatos.
+
+**Nesta entrega, não havia chave nem modelo configurados.** O modo sem IA foi testado no navegador. A chamada à IA configurada foi verificada com respostas simuladas do provedor (incluindo falha e citação inválida); nenhuma chamada real externa foi feita. Para validar essa parte com um provedor real, será necessária sua configuração.
+
+### Onde está o código
+
+- `assistente.py`: `fontes_publicadas()` filtra dados permitidos; `responder_duvida()` seleciona fontes e usa IA opcional; `preparar_limpeza()` pede dados ausentes e guarda somente o rascunho; `confirmar_limpeza()` confere a residência e chama o fluxo existente.
+- `server.py`: novos endpoints `/api/assistant/question`, `/api/assistant/cleaning/preview` e `/api/assistant/cleaning/confirm`. Os dois últimos passam pela transação e revalidação do código já existentes. A redação por IA ocorre fora da transação de escrita.
+- `solicitacoes.py` e `encaminhamento.py`: reutilizados sem alterações para equipe, solicitação, ordem e fila.
+- `public/app.js`: `assistantPage()` monta somente a tela nova. As outras mudanças são a rota, o rótulo da seção e o único link novo no menu do morador.
+
+`assistant_drafts` vincula um token imprevisível à residência e, após confirmar, ao chamado criado. A gravação da solicitação, da OS e desse vínculo acontece na mesma transação. Se uma gravação falhar, tudo é revertido; a nova tentativa pode usar o mesmo token. O servidor não confia em residência, equipe ou status enviados pelo navegador.
+
+### Verificações do assistente
+
+```sh
+python3 -m unittest discover -s tests -v
+NODE_PATH=/tmp/residencial-browser/node_modules node tests/assistente-ui.cjs
+```
+
+O teste Python cobre dados ausentes, resumo editável, confirmação explícita, quatro confirmações concorrentes com uma única OS, troca de código, perfis, isolamento, rollback, fontes permitidas e fallback da IA. O teste Chromium cobre o roteiro completo com a fila existente e o segundo morador, sem IA externa, em 375 e 1280 px. Todos usam bancos temporários.
+
+`tests/assistente-visual.cjs` captura ou compara as telas anteriores. Antes da edição, use `PR_VISUAL_BASELINE=/pasta/de/referencia`; depois, acrescente `PR_VISUAL_COMPARE=1`. A comparação desconsidera apenas o link Assistente autorizado. Nesta etapa, **11 capturas ficaram idênticas**: login desktop/celular, Início/Consultas/detalhe/solicitações/regras do morador, boas-vindas, Visão geral, Convites e Fila da gestão. O diff foi revisado para manter intactos os estilos globais e os arquivos visuais anteriores.
+
 ## Verificação
 
 ```sh

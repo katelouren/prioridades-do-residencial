@@ -548,10 +548,100 @@ function resetSystemShell() {
   logout.className='header-button';
   systemMenuOpen=false;adminMenu.setAttribute('aria-expanded','false');
 }
+// Nova tela isolada: reaproveita componentes sem alterar as telas existentes.
+function assistantPage() {
+  const container=el('div',undefined,{id:'assistant-screen',class:'detail'});
+  container.append(heading('Assistente','Tire dúvidas sobre as informações publicadas ou prepare um chamado de limpeza.'));
+  const choices=el('div',undefined,{class:'task-actions'});
+  const doubt=el('button','Tirar uma dúvida',{type:'button',class:'secondary','aria-pressed':'false'});
+  const cleaning=el('button','Solicitar limpeza',{type:'button',class:'secondary','aria-pressed':'false'});
+  choices.append(doubt,cleaning);container.append(choices);
+  const questionBox=panel('Tirar uma dúvida');questionBox.hidden=true;
+  questionBox.append(el('p','Consulte as informações já publicadas no portal. As respostas sempre vêm acompanhadas das fontes.',{class:'quiet'}));
+  const questionForm=el('form');
+  const question=field(questionForm,'Sua dúvida','assistant-question','textarea',{required:'',maxlength:'1500',rows:'3'});
+  const answer=el('div',undefined,{class:'assistant-answer','aria-live':'polite'});
+  submit(questionForm,'Consultar informações',async()=>{
+    answer.replaceChildren(el('p','Consultando as informações publicadas…',{class:'quiet'}));
+    try {
+      const result=await api('/api/assistant/question',{question:question.value});
+      answer.replaceChildren(el('h3','Resposta'),el('p',result.answer,{class:'service-description'}),el('h3','Fontes para consultar'));
+      for(const source of result.sources) {
+        const item=el('div',undefined,{class:'document-row'});
+        item.append(badge(source.id,'muted'),el('p'),link(source.title,source.href));
+        const excerpt=el('details');excerpt.append(el('summary','Trecho publicado'),el('p',source.content,{class:'hint service-description'}));
+        item.append(excerpt);answer.append(item);
+      }
+    } catch(error) {
+      answer.replaceChildren(el('p','Não foi possível consultar agora. Você pode tentar novamente ou usar as seções Consultas e Regras e contatos.',{class:'quiet'}));
+      throw error;
+    }
+  });
+  questionBox.append(questionForm,answer);
+  const cleaningBox=panel('Solicitar limpeza');cleaningBox.hidden=true;
+  cleaningBox.append(el('p','Conte o que precisa ser limpo. Nesta etapa, o atendimento disponível é a higiene da academia.',{class:'quiet'}));
+  const requestForm=el('form');
+  const entry=field(requestForm,'Mensagem sobre a limpeza','assistant-message','textarea',{required:'',maxlength:'1500',rows:'3',placeholder:'Ex.: A academia está suja'});
+  const local=field(requestForm,'Local da solicitação','assistant-local','input',{maxlength:'80'});local.parentElement.hidden=true;
+  const description=field(requestForm,'Descrição da solicitação','assistant-description','textarea',{maxlength:'1500',rows:'3'});description.parentElement.hidden=true;
+  const prompt=el('p','Nenhum chamado será registrado antes da sua confirmação.',{class:'hint','aria-live':'polite'});
+  requestForm.append(prompt);
+  const summary=panel('Confira antes de confirmar',3);summary.hidden=true;
+  submit(requestForm,'Preparar chamado',async()=>{
+    const data={message:entry.value};
+    if(!local.parentElement.hidden)data.local=local.value;
+    if(!description.parentElement.hidden)data.description=description.value;
+    const preview=await api('/api/assistant/cleaning/preview',data);
+    if(!preview.ready) {
+      prompt.textContent=preview.message;
+      if(preview.missing.includes('local')){local.parentElement.hidden=false;local.required=true;local.focus();}
+      if(preview.missing.includes('description')){description.parentElement.hidden=false;description.required=true;description.focus();}
+      return;
+    }
+    summary.replaceChildren(el('h3','Confira antes de confirmar'),el('p','Revise o local e a descrição. A equipe de destino é definida automaticamente pela regra de encaminhamento.',{class:'quiet'}));
+    const form=el('form');
+    const finalLocal=field(form,'Local do chamado','assistant-final-local','input',{required:'',maxlength:'80'});finalLocal.value=preview.summary.local;
+    const finalDescription=field(form,'Descrição do chamado','assistant-final-description','textarea',{required:'',maxlength:'1500',rows:'3'});finalDescription.value=preview.summary.description;
+    const team=field(form,'Equipe de destino','assistant-team','input',{readonly:''});team.value=preview.summary.team;
+    submit(form,'Confirmar chamado',async()=>{
+      const result=await api('/api/assistant/cleaning/confirm',{token:preview.token,local:finalLocal.value,description:finalDescription.value});
+      await refresh(`Chamado confirmado. Protocolo ${result.request.protocol}. Acompanhe o andamento abaixo.`,'assistente');
+    });
+    const back=el('button','Voltar à mensagem',{type:'button',class:'text-button'});
+    back.addEventListener('click',()=>{
+      summary.hidden=true;requestForm.hidden=false;
+      local.parentElement.hidden=true;local.required=false;local.value='';
+      description.parentElement.hidden=true;description.required=false;description.value='';
+      entry.focus();
+    });
+    form.append(back);summary.append(form);requestForm.hidden=true;summary.hidden=false;finalLocal.focus();
+  });
+  cleaningBox.append(requestForm,summary);
+  const choose=(path)=>{
+    questionBox.hidden=path!=='question';cleaningBox.hidden=path!=='cleaning';
+    doubt.setAttribute('aria-pressed',String(path==='question'));cleaning.setAttribute('aria-pressed',String(path==='cleaning'));
+    doubt.className=path==='question'?'primary':'secondary';cleaning.className=path==='cleaning'?'primary':'secondary';
+    (path==='question'?question:entry).focus();
+  };
+  doubt.addEventListener('click',()=>choose('question'));cleaning.addEventListener('click',()=>choose('cleaning'));
+  const history=panel('Meus chamados');
+  const list=el('div',undefined,{class:'assistant-requests service-list'});
+  const renderRequests=()=>{
+    list.replaceChildren();
+    if(!model.requests.length)list.append(el('p','Nenhum chamado da sua residência.',{class:'quiet'}));
+    for(const item of model.requests)list.append(serviceCard(item));
+  };
+  const update=el('form',undefined,{class:'service-refresh'});
+  submit(update,'Atualizar meus chamados',async()=>{
+    const data=await api('/api/requests');model.requests=data.requests;renderRequests();message('Andamento dos seus chamados atualizado.');
+  });
+  renderRequests();history.append(update,list);container.append(questionBox,cleaningBox,history);return container;
+}
+
 function systemSection(current) {
   if(!model.admin) {
     if(current.startsWith('consulta/'))return 'consultas';
-    return ['inicio','consultas','acompanhamento','solicitacoes','regras'].includes(current) ? current : 'inicio';
+    return ['inicio','consultas','acompanhamento','solicitacoes','regras','assistente'].includes(current) ? current : 'inicio';
   }
   if(current==='gestao/convites')return 'convites';
   if(current==='devolutivas' || current==='acompanhamento')return 'devolutivas';
@@ -568,7 +658,7 @@ function renderSystemShell(current) {
   navigation.className='admin-sidebar';navigation.setAttribute('aria-label',model.admin ? 'Painel da gestão' : 'Área do morador');
   document.querySelector('#admin-header').hidden=false;
   const active=systemSection(current);
-  const labels={'visao-geral':'Visão geral',consultas:'Consultas',devolutivas:'Devolutivas',convites:'Convites',limpeza:'Fila de limpeza',inicio:'Início',acompanhamento:'Acompanhamento',solicitacoes:'Minhas solicitações',regras:'Regras e contatos'};
+  const labels={'visao-geral':'Visão geral',consultas:'Consultas',devolutivas:'Devolutivas',convites:'Convites',limpeza:'Fila de limpeza',inicio:'Início',acompanhamento:'Acompanhamento',solicitacoes:'Minhas solicitações',regras:'Regras e contatos',assistente:'Assistente'};
   document.querySelector('#admin-section-name').textContent=labels[active];
   document.querySelector('.admin-header-profile').textContent=model.admin ? 'Gestão · Demonstração' : 'Morador · Demonstração';
   const brand=el('div',undefined,{class:'sidebar-brand'});
@@ -581,7 +671,7 @@ function renderSystemShell(current) {
     ['Fila de limpeza','limpeza','limpeza','cleaning']] : [
     ['Início','inicio','inicio','home'],['Consultas','consultas','consultas','surveys'],
     ['Acompanhamento','acompanhamento','acompanhamento','response'],
-    ['Minhas solicitações','solicitacoes','solicitacoes','cleaning'],['Regras e contatos','regras','regras','surveys']];
+    ['Minhas solicitações','solicitacoes','solicitacoes','cleaning'],['Regras e contatos','regras','regras','surveys'],['Assistente','assistente','assistente','help']];
   for(const [label,section,to,icon] of sections) {
     const item=link('',`#${to}`);item.append(adminIcon(icon),el('span',label));item.setAttribute('data-admin-section',section);
     if(section===active)item.setAttribute('aria-current','page');
@@ -724,6 +814,7 @@ function draw() {
   else if(current==='devolutivas') page=model.admin ? tracking('Devolutivas') : heading('Área exclusiva da gestão','Use Acompanhamento para consultar os retornos.');
   else if(current==='acompanhamento')page=tracking(model.admin ? 'Devolutivas' : 'Acompanhamento');
   else if(current==='regras')page=resources();
+  else if(current==='assistente')page=model.admin ? heading('Área exclusiva do morador','O assistente atende as residências. Use a fila de limpeza para acompanhar as ordens.') : assistantPage();
   else if(current==='solicitacoes') {
     page=model.admin ? heading('Área exclusiva do morador', 'Use Fila de limpeza para consultar e concluir ordens.') : requestsPage();
   } else if(current==='limpeza' || current.startsWith('limpeza/')) {

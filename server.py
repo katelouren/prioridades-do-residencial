@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 from solicitacoes import criar_tabelas, criar_solicitacao, listar_solicitacoes, listar_fila_limpeza, concluir_ordem
+from assistente import criar_tabelas as criar_tabelas_assistente, preparar_limpeza, confirmar_limpeza, fontes_publicadas, responder_duvida
 
 ROOT = Path(__file__).resolve().parent
 DATABASE = os.environ.get("RESIDENCIAL_DB", str(ROOT / "residencial.sqlite3"))
@@ -77,6 +78,7 @@ def init():
             db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_active_code ON invites(residence_id) WHERE active=1")
             db.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_participation ON votes(survey,residence_id)")
             criar_tabelas(db)
+            criar_tabelas_assistente(db)
             for table in ("invites", "votes"):
                 for operation in ("INSERT", "UPDATE"):
                     db.execute(f"CREATE TRIGGER IF NOT EXISTS {table}_residence_{operation} BEFORE {operation} ON {table} WHEN NEW.residence_id IS NULL BEGIN SELECT RAISE(ABORT, 'residence required'); END")
@@ -253,6 +255,13 @@ class Handler(BaseHTTPRequestHandler):
                 data = json.loads(self.rfile.read(size))
                 if not isinstance(data, dict):
                     raise ValueError("Formato da solicitação inválido.")
+                if path == "/api/assistant/question":
+                    if admin:
+                        raise PermissionError()
+                    # A IA recebe só as fontes permitidas; rede fora de transação de escrita.
+                    result = responder_duvida(data.get("question"), fontes_publicadas(list_surveys(db, hashed)))
+                    self.send(200, result)
+                    return
                 with db:
                     # Impede que o encerramento ou outro voto altere o estado durante a validação.
                     db.execute("BEGIN IMMEDIATE")
@@ -273,6 +282,15 @@ class Handler(BaseHTTPRequestHandler):
                 self.error(400, message)
 
     def mutate(self, db, path, data, admin, hashed):
+        if path in ("/api/assistant/cleaning/preview", "/api/assistant/cleaning/confirm"):
+            if admin:
+                raise PermissionError()
+            residence = db.execute("SELECT residence_id FROM invites WHERE code_hash=? AND active=1", (hashed,)).fetchone()
+            if residence is None:
+                raise PermissionError()
+            if path.endswith("/preview"):
+                return preparar_limpeza(db, residence["residence_id"], data)
+            return {"request": confirmar_limpeza(db, residence["residence_id"], data)}
         if path == "/api/requests":
             if admin:
                 raise PermissionError()
