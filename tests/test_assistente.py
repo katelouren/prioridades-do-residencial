@@ -1,5 +1,6 @@
 """Assistente: confirmação humana, idempotência, fontes permitidas e fallback."""
 import io
+from http.client import IncompleteRead, RemoteDisconnected
 import json
 import os
 import sqlite3
@@ -21,7 +22,7 @@ class AssistantFlow(unittest.TestCase):
         server.DATABASE=os.path.join(self.tmp.name,'assistant.sqlite3')
         import demo
         demo.seed()
-        self.env=patch.dict(os.environ,{'OPENAI_API_KEY':'','OPENAI_MODEL':''});self.env.start()
+        self.env=patch.dict(os.environ,{'GEMINI_API_KEY':'','GEMINI_MODEL':''});self.env.start()
         self.http=ThreadingHTTPServer(('127.0.0.1',0),server.Handler)
         self.thread=threading.Thread(target=self.http.serve_forever,daemon=True);self.thread.start()
     def tearDown(self):
@@ -100,7 +101,7 @@ class AssistantFlow(unittest.TestCase):
             db.execute("UPDATE surveys SET response='SEGREDO_NAO_PUBLICADO' WHERE closed=0")
         self.api('/api/requests',{'local':'Academia','category':'Higiene','description':'PRIVADO_OUTRA_RESIDENCIA'},'demo-morador-2')
         status,reply=self.api('/api/assistant/question',{'question':'Decoração de um evento','context':'contexto forjado'})
-        self.assertEqual(status,200);self.assertEqual(reply['mode'],'links')
+        self.assertEqual(status,200);self.assertEqual(reply['mode'],'local')
         self.assertTrue(any(s['href']=='#consulta/2' for s in reply['sources']))
         self.assertNotIn('SEGREDO_NAO_PUBLICADO',json.dumps(reply));self.assertNotIn('PRIVADO_OUTRA_RESIDENCIA',json.dumps(reply))
         status,reply=self.api('/api/assistant/question',{'question':'Decisão sobre iluminação'})
@@ -111,25 +112,78 @@ class AssistantFlow(unittest.TestCase):
         self.assertIn('Não encontrei',reply['answer'])
         self.assertEqual(self.api('/api/assistant/question',{'question':' '})[0],400)
 
+    def test_authenticated_gemini_uses_public_context_and_acknowledges_missing_contact(self):
+        with closing(server.connect()) as db,db:
+            db.execute("UPDATE surveys SET response='SEGREDO_NAO_PUBLICADO' WHERE closed=0")
+        self.api('/api/requests',{'local':'Academia','category':'Higiene','description':'PRIVADO_OUTRA_RESIDENCIA'},'demo-morador-2')
+        captured=[]
+        def respond(request,timeout):
+            context=json.loads(json.loads(request.data)['contents'][0]['parts'][0]['text']);captured.append(context)
+            self.assertNotIn('SEGREDO_NAO_PUBLICADO',json.dumps(context))
+            self.assertNotIn('PRIVADO_OUTRA_RESIDENCIA',json.dumps(context))
+            self.assertNotIn('residence_id',json.dumps(context));self.assertNotIn('contexto forjado',json.dumps(context))
+            source=context['fontes'][0]
+            answer=('O telefone não está disponível: o contato está A informar.' if 'telefone' in context['pergunta']
+                    else 'A decisão publicada trata da iluminação.')+' ['+source['id']+']'
+            return io.BytesIO(json.dumps({'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':answer}]}}]}).encode())
+        with patch.dict(os.environ,{'GEMINI_API_KEY':'chave-ficticia-pr','GEMINI_MODEL':'modelo-ficticio'}),patch('gemini_pr.urlopen',side_effect=respond):
+            status,result=self.api('/api/assistant/question',{'question':'Decisão sobre iluminação','context':'contexto forjado'})
+            self.assertEqual(status,200);self.assertEqual(result['mode'],'live')
+            status,result=self.api('/api/assistant/question',{'question':'Qual telefone da administração?'})
+            self.assertEqual(result['mode'],'live');self.assertIn('não está disponível',result['answer'])
+            self.assertIn('A informar',json.dumps(captured[-1]))
+            self.assertEqual(self.api('/api/assistant/question',{'question':'iluminação'},server.ADMIN)[0],403)
+            self.assertEqual(self.api('/api/assistant/question',{'question':'iluminação'},'codigo-invalido')[0],401)
+        self.assertEqual(len(captured),2)
 
-class AIAdapter(unittest.TestCase):
+
+class GeminiAdapter(unittest.TestCase):
     def sources(self):return [{'id':'F1','title':'Consulta fictícia','href':'#consulta/1','content':'Decisão publicada: melhorar iluminação.'}]
-    def test_configured_ai_receives_bounded_sources_and_does_not_store_response(self):
-        import assistente
+    def response(self,text,**overrides):
+        return io.BytesIO(json.dumps({'candidates':[{'finishReason':'STOP','content':{'parts':[{'text':text}]} }],**overrides}).encode())
+    def test_gemini_contract_and_origin_without_exposing_key(self):
+        import gemini_pr,assistente
         captured={}
         def respond(request,timeout):
-            captured.update(json.loads(request.data));self.assertEqual(request.full_url,'https://api.openai.com/v1/responses')
-            self.assertLessEqual(timeout,20)
-            return io.BytesIO(json.dumps({'output':[{'type':'message','content':[{'type':'output_text','text':'A decisão é melhorar a iluminação. [F1]'}]}]}).encode())
-        with patch.dict(os.environ,{'OPENAI_API_KEY':'chave-ficticia','OPENAI_MODEL':'modelo-configurado'}),patch('assistente.urlopen',side_effect=respond):
+            captured.update(json.loads(request.data))
+            self.assertEqual(request.full_url,'https://generativelanguage.googleapis.com/v1beta/models/modelo-ficticio:generateContent')
+            self.assertEqual(request.get_header('X-goog-api-key'),'chave-ficticia-pr')
+            self.assertNotIn('chave-ficticia-pr',request.full_url);self.assertNotIn('chave-ficticia-pr',request.data.decode())
+            self.assertEqual(timeout,12)
+            return self.response('A decisão é melhorar a iluminação. [F1]')
+        with patch.dict(os.environ,{'GEMINI_API_KEY':'chave-ficticia-pr','GEMINI_MODEL':'modelo-ficticio'}),patch('gemini_pr.urlopen',side_effect=respond):
             reply=assistente.responder_duvida('Qual a decisão?',self.sources())
-        self.assertEqual(reply['mode'],'ai');self.assertIn('[F1]',reply['answer'])
-        self.assertFalse(captured['store']);self.assertEqual(captured['model'],'modelo-configurado');self.assertNotIn('tools',captured)
-        self.assertIn('melhorar iluminação',captured['input'])
-    def test_ai_failure_or_unknown_citation_falls_back_to_sources(self):
+        self.assertEqual(reply['mode'],'live');self.assertEqual(reply['provider'],'gemini');self.assertFalse(reply['unavailable'])
+        self.assertIn('português',captured['systemInstruction']['parts'][0]['text'])
+        self.assertEqual(captured['generationConfig']['maxOutputTokens'],2048);self.assertNotIn('tools',captured)
+        context=json.loads(captured['contents'][0]['parts'][0]['text'])
+        self.assertEqual(context['fontes'],self.sources())
+        self.assertNotIn('residence_id',context)
+
+    def test_failures_blocks_empty_outputs_unknown_citations_and_secret_echo_fall_back(self):
         import assistente
-        with patch.dict(os.environ,{'OPENAI_API_KEY':'chave-ficticia','OPENAI_MODEL':'modelo-configurado'}):
-            with patch('assistente.urlopen',side_effect=TimeoutError()):
-                reply=assistente.responder_duvida('Qual a decisão?',self.sources());self.assertEqual(reply['mode'],'links')
-            with patch('assistente.urlopen',return_value=io.BytesIO(json.dumps({'output':[{'type':'message','content':[{'type':'output_text','text':'Dado inventado. [F999]'}]}]}).encode())):
-                reply=assistente.responder_duvida('Qual a decisão?',self.sources());self.assertEqual(reply['mode'],'links');self.assertNotIn('inventado',reply['answer'])
+        broken=[b'not-json',json.dumps({'candidates':[]}).encode(),
+                json.dumps({'promptFeedback':{'blockReason':'SAFETY'}}).encode(),
+                json.dumps({'candidates':[{'finishReason':'MAX_TOKENS','content':{'parts':[{'text':'Parcial [F1]'}]}}]}).encode(),
+                json.dumps({'candidates':[{'finishReason':'STOP','content':{'parts':[{'thought':True,'text':'Somente pensamento [F1]'}]}}]}).encode()]
+        with patch.dict(os.environ,{'GEMINI_API_KEY':'chave-ficticia-pr','GEMINI_MODEL':'modelo-ficticio'}):
+            for raw in broken:
+                with self.subTest(raw=raw),patch('gemini_pr.urlopen',return_value=io.BytesIO(raw)):
+                    reply=assistente.responder_duvida('Qual a decisão?',self.sources());self.assertEqual(reply['mode'],'local');self.assertTrue(reply['unavailable'])
+            for text in ['Dado inventado. [F999]','chave-ficticia-pr [F1]','Visite https://exemplo-inventado.test [F1]']:
+                with self.subTest(text=text),patch('gemini_pr.urlopen',return_value=self.response(text)):
+                    reply=assistente.responder_duvida('Qual a decisão?',self.sources());self.assertEqual(reply['mode'],'local');self.assertNotIn('chave-ficticia-pr',json.dumps(reply))
+            for error in [TimeoutError(),IncompleteRead(b'{',10),RemoteDisconnected(),HTTPError('https://generativelanguage.googleapis.com',429,'rate limit',{},None)]:
+                with patch('gemini_pr.urlopen',side_effect=error):
+                    self.assertEqual(assistente.responder_duvida('Qual a decisão?',self.sources())['mode'],'local')
+
+    def test_without_key_without_data_invalid_model_and_question_limits(self):
+        import assistente
+        with patch.dict(os.environ,{'GEMINI_API_KEY':'','GEMINI_MODEL':'modelo-ficticio'}),patch('gemini_pr.urlopen') as network:
+            result=assistente.responder_duvida('Qual a decisão?',self.sources());self.assertEqual(result['mode'],'local');network.assert_not_called()
+        with patch.dict(os.environ,{'GEMINI_API_KEY':'chave-ficticia-pr','GEMINI_MODEL':'modelo-ficticio'}),patch('gemini_pr.urlopen') as network:
+            result=assistente.responder_duvida('Zorbax desconhecido',self.sources());self.assertIn('Não encontrei',result['answer']);network.assert_not_called()
+        with patch.dict(os.environ,{'GEMINI_API_KEY':'chave-ficticia-pr','GEMINI_MODEL':'../../outro?key=valor'}),patch('gemini_pr.urlopen') as network:
+            self.assertEqual(assistente.responder_duvida('Qual a decisão?',self.sources())['mode'],'local');network.assert_not_called()
+        for invalid in ['', ' '*4, 'x'*1501, None]:
+            with self.assertRaises(ValueError):assistente.responder_duvida(invalid,self.sources())

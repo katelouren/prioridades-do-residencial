@@ -230,21 +230,45 @@ Abra http://127.0.0.1:8000 e recarregue com **⌘R**. Se precisar manter outro s
 
 O assistente também mostra chamados anteriores da própria residência. O resumo pode ser abandonado sem criar OS. Uma nova preparação gera outro rascunho; a proteção contra duplicação é por confirmação do mesmo rascunho. Não há envio de mensagens, agendamento ou IA com permissão de executar ações.
 
-### IA opcional no servidor
+### Gemini opcional no servidor
 
-Sem configuração, dúvidas retornam links e trechos relevantes; limpeza e confirmação funcionam normalmente. Para permitir redação por IA, defina **as duas variáveis** no ambiente do processo Python:
+A tela identifica **Resposta do Gemini** ou **Orientações locais do PR**. Sem chave, sem modelo, com timeout ou falha do provedor, mostra links úteis e mantém o chamado de limpeza funcionando. Perguntas têm limite de 1500 caracteres.
 
-- `OPENAI_API_KEY`: chave da sua conta, apenas no servidor.
-- `OPENAI_MODEL`: identificador de um modelo disponível na sua conta e compatível com Responses API.
+No Terminal do Mac, dentro da pasta do projeto:
 
-A aplicação não carrega `.env` automaticamente e não instala dependências adicionais. Não coloque a chave em JavaScript, README ou commit. A integração usa a [Responses API oficial da OpenAI](https://developers.openai.com/api/reference/resources/responses/methods/create), com `store: false`, limite de saída, timeout de 15 segundos e sem ferramentas de execução. Envia somente a dúvida e até cinco trechos relevantes de informações que os moradores já podem consultar. Não envia convites, identificadores de residência, votos individuais, solicitações privadas ou fila da gestão. Resultados e devolutivas de consultas abertas não entram nas fontes.
+```sh
+cp config/gemini.env.example .env
+open -e .env
+```
 
-Os links de origem são construídos pelo servidor a partir do portal, nunca aceitos da IA. Se a IA falhar, não retornar texto ou citar fontes desconhecidas, a resposta volta ao modo de links. A IA é instruída a informar ausência de dados e a não inventar contatos, decisões ou prazos. O assistente não importa o conteúdo integral das leis e não faz interpretação jurídica: aponta para as referências já existentes em Regras e contatos.
+Substitua os dois valores fictícios pelas configurações da **sua conta do PR**: `GEMINI_API_KEY` e `GEMINI_MODEL` (identificador de um modelo disponível na sua conta). Nunca use a chave de outro projeto. Salve e inicie o servidor no mesmo Terminal:
 
-**Nesta entrega, não havia chave nem modelo configurados.** O modo sem IA foi testado no navegador. A chamada à IA configurada foi verificada com respostas simuladas do provedor (incluindo falha e citação inválida); nenhuma chamada real externa foi feita. Para validar essa parte com um provedor real, será necessária sua configuração.
+```sh
+set -a
+source .env
+set +a
+python3 demo.py
+```
+
+Abra http://127.0.0.1:8000, entre com `demo-morador-1` e escolha **Assistente**. Pare qualquer servidor anterior com Ctrl+C antes de reiniciar para carregar o código e o ambiente novos. A aplicação não lê `.env` automaticamente; o comando `source` acima o carrega. O arquivo está ignorado pelo Git. Não coloque chave em JavaScript, logs ou commits. Nenhuma dependência Python adicional é necessária.
+
+O adaptador usa o [generateContent oficial do Gemini](https://ai.google.dev/api/generate-content), com a chave exclusivamente no cabeçalho `x-goog-api-key`, timeout de 12 segundos, limite de saída e sem ferramentas. Foram adaptados os padrões de validação, falha e origem da [rota do Happy Game Hub](https://github.com/katelouren/happy-game-hub-cyber/blob/692d0aabd65e56d25d6b29d77357d0d604bd0eb3/app/api/assistant/route.js); nenhuma chave foi acessada ou reutilizada.
+
+Envia somente a pergunta e até cinco trechos relevantes permitidos ao morador. Não envia convites, identificadores de residência, votos individuais, chamados privados ou fila da gestão. Não escreva dados pessoais na pergunta, que é enviada ao provedor. Resultados e devolutivas de consultas abertas não entram nas fontes. Links são construídos pelo servidor a partir dos registros, nunca aceitos da IA. Bloqueios, saídas incompletas, texto vazio, citações desconhecidas e URLs geradas acionam orientações locais. O Gemini recebe instruções para informar dados ausentes, sem inventar decisões, prazos, regras ou contatos; a geração não é uma garantia factual, por isso as fontes permanecem visíveis.
+
+O preenchimento de limpeza é **local e determinístico**: reconhece Academia, permite revisar descrição e local, e o servidor determina a equipe. Nenhuma chamada Gemini é necessária para registrar ou concluir uma OS. Só a confirmação cria a solicitação e sua tarefa na fila existente.
+
+**Teste real pendente:** não havia `GEMINI_API_KEY` nem `GEMINI_MODEL` do PR configurados nesta entrega. Os testes automatizados usam respostas simuladas e não acessam o Gemini. Após configurar, execute separadamente:
+
+```sh
+python3 tests/gemini_real.py
+```
+
+Esse teste usa banco temporário, a rota autenticada real e uma pergunta sobre iluminação. Só informa sucesso quando recebe `mode=live`; indisponibilidade não é contada como sucesso. Para testar pelo navegador, pergunte “O que foi decidido sobre iluminação?” e confira a origem. Pergunte “Qual o telefone da administração?”: o contato está A informar e a resposta deve reconhecer essa ausência. Sem as variáveis, reinicie o servidor e confirme **Orientações locais do PR**.
 
 ### Onde está o código
 
+- `gemini_pr.py`: `redigir_resposta()` realiza a chamada Gemini e valida a saída; não registra chave nem resposta do provedor em logs.
 - `assistente.py`: `fontes_publicadas()` filtra dados permitidos; `responder_duvida()` seleciona fontes e usa IA opcional; `preparar_limpeza()` pede dados ausentes e guarda somente o rascunho; `confirmar_limpeza()` confere a residência e chama o fluxo existente.
 - `server.py`: novos endpoints `/api/assistant/question`, `/api/assistant/cleaning/preview` e `/api/assistant/cleaning/confirm`. Os dois últimos passam pela transação e revalidação do código já existentes. A redação por IA ocorre fora da transação de escrita.
 - `solicitacoes.py` e `encaminhamento.py`: reutilizados sem alterações para equipe, solicitação, ordem e fila.
@@ -257,7 +281,10 @@ Os links de origem são construídos pelo servidor a partir do portal, nunca ace
 ```sh
 python3 -m unittest discover -s tests -v
 NODE_PATH=/tmp/residencial-browser/node_modules node tests/assistente-ui.cjs
+PR_GEMINI_SIMULATED=1 NODE_PATH=/tmp/residencial-browser/node_modules node tests/assistente-ui.cjs
 ```
+
+Nesta integração, **21 testes Python passaram**. Foram simulados contrato Gemini, resposta sobre decisão publicada, ausência de contato, timeout, desconexão HTTP, bloqueio, saída incompleta, JSON inválido, chave ausente e citação inválida. A rota autenticada foi verificada sem contexto forjado nem conteúdo de chamados privados. No Chromium, os modos local e Gemini simulado passaram pelo fluxo completo de limpeza e isolamento entre moradores.
 
 O teste Python cobre dados ausentes, resumo editável, confirmação explícita, quatro confirmações concorrentes com uma única OS, troca de código, perfis, isolamento, rollback, fontes permitidas e fallback da IA. O teste Chromium cobre o roteiro completo com a fila existente e o segundo morador, sem IA externa, em 375 e 1280 px. Todos usam bancos temporários.
 

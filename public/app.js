@@ -565,7 +565,7 @@ function assistantPage() {
     answer.replaceChildren(el('p','Consultando as informações publicadas…',{class:'quiet'}));
     try {
       const result=await api('/api/assistant/question',{question:question.value});
-      answer.replaceChildren(el('h3','Resposta'),el('p',result.answer,{class:'service-description'}),el('h3','Fontes para consultar'));
+      answer.replaceChildren(el('span',result.mode==='live'?'Resposta do Gemini':'Orientações locais do PR',{class:'badge'}),el('h3','Resposta'),el('p',result.answer,{class:'service-description'}),el('h3','Fontes para consultar'));
       for(const source of result.sources) {
         const item=el('div',undefined,{class:'document-row'});
         item.append(badge(source.id,'muted'),el('p'),link(source.title,source.href));

@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-ui-'));
 let child, browser;
 async function start() {
-  child = spawn('python3', ['demo.py'], {cwd:path.join(__dirname,'..'),env:{...process.env,RESIDENCIAL_DB:path.join(tmp,'ui.sqlite3'),RESIDENCIAL_PORT:'0',OPENAI_API_KEY:'',OPENAI_MODEL:''}});
+  child = spawn('python3', [process.env.PR_GEMINI_SIMULATED==='1'?'tests/gemini_stub_server.py':'demo.py'], {cwd:path.join(__dirname,'..'),env:{...process.env,RESIDENCIAL_DB:path.join(tmp,'ui.sqlite3'),RESIDENCIAL_PORT:'0',GEMINI_API_KEY:'',GEMINI_MODEL:''}});
   return new Promise((resolve,reject)=>{
     let output='';
     const timer=setTimeout(()=>reject(new Error('Servidor não iniciou')),10000);
@@ -31,7 +31,8 @@ async function stop() {
   await login(page,'demo-morador-1');await nav(page,'Assistente');
   await page.getByRole('button',{name:'Tirar uma dúvida',exact:true}).click();
   await page.getByLabel('Sua dúvida',{exact:true}).fill('O que foi decidido sobre iluminação?');await page.getByRole('button',{name:'Consultar informações',exact:true}).click();
-  await page.locator('.assistant-answer').getByText(/IA está indisponível/).waitFor();
+  await page.locator('.assistant-answer').getByText(process.env.PR_GEMINI_SIMULATED==='1'?'Resposta do Gemini':'Orientações locais do PR',{exact:true}).waitFor();
+  if(process.env.PR_GEMINI_SIMULATED!=='1')await page.locator('.assistant-answer').getByText(/IA está indisponível/).waitFor();
   await page.locator('.assistant-answer').getByRole('link',{name:'Melhorias da área comum',exact:true}).click();
   await page.getByRole('heading',{level:1,name:'Melhorias da área comum',exact:true}).waitFor();
   await nav(page,'Assistente');await page.getByRole('button',{name:'Solicitar limpeza',exact:true}).click();
@@ -69,5 +70,5 @@ async function stop() {
   await page.reload();await page.getByLabel('Código de acesso',{exact:true}).fill('demo-morador-1');await page.getByRole('button',{name:'Entrar',exact:true}).click();await page.getByRole('heading',{level:1,name:'Assistente',exact:true}).waitFor();
   await page.locator('.assistant-requests .request-card').getByText('Aparelhos higienizados',{exact:true}).waitFor();
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.deepEqual(errors,[]);
-  console.log('OK: dúvida com fontes sem IA; complementação; resumo editável sem OS antes da confirmação; duplo clique sem duplicar; fila existente/conclusão/retorno no assistente; privacidade; 375/1280 e recarregar.');
+  console.log('OK: origem '+(process.env.PR_GEMINI_SIMULATED==='1'?'Gemini simulado':'orientações locais')+'; dúvida com fontes; complementação; resumo editável sem OS antes da confirmação; duplo clique sem duplicar; fila existente/conclusão/retorno no assistente; privacidade; 375/1280 e recarregar.');
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();await stop();fs.rmSync(tmp,{recursive:true,force:true});});
