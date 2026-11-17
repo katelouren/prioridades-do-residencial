@@ -2,6 +2,8 @@
 
 Portal para a GS2 de CitizenTech da FIAP: **publicar → participar → encerrar → dar retorno**. A gestão consulta as residências sobre eventos e melhorias; moradores acompanham o resultado e os próximos passos. As consultas orientam a decisão da gestão. **Residencial Horizonte é fictício. Os cenários, acessos, valores e participações da apresentação são demonstrativos.**
 
+A versão com assistente flutuante, regulamento e canais compartilhados está na branch **`assistente-gemini`**. O Gemini é opcional: sem configuração, o portal mantém respostas locais e o fluxo de limpeza. Para usar IA, copie `config/gemini.env.example` para `.env` e preencha somente no seu computador; esse arquivo não é publicado no Git.
+
 ## Abrir no Mac
 
 Requer Python 3.9 ou superior, sem bibliotecas adicionais.
@@ -138,7 +140,7 @@ O servidor rejeita ações de gestão feitas por morador, códigos inválidos/re
 - **Acompanhamento:** somente consultas encerradas, agrupadas em aguardando devolutiva, em acompanhamento e concluídas. Área responsável e próxima atualização aparecem quando informadas.
 - **Resultado e retorno:** contagem por opção e total de participações após encerrar. A decisão, o próximo passo, a área responsável e a data do próximo retorno ficam em destaque. A previsão de conclusão é separada e pode ficar A definir. Ausência de devolutiva tem mensagem explícita.
 - **Gestão:** telas próprias para criar consulta e gerenciar convites. O detalhe da consulta aberta oferece encerramento com explicação e confirmação; a encerrada oferece publicação/atualização da devolutiva e confirma que ficou disponível para os moradores.
-- **Regras e contatos:** tela própria, com canais por assunto primeiro, documentos do residencial depois e referências gerais ao final. Documentos indisponíveis exibem Aguardando publicação. Os contatos ficam A informar; nenhum dado pessoal é publicado.
+- **Regras e contatos:** tela própria, com canais por assunto primeiro, documentos do residencial depois e referências gerais ao final. O Regulamento Interno do Residencial Horizonte está publicado com links por artigo. Os demais documentos indisponíveis exibem Aguardando publicação. Os contatos ficam A informar; nenhum dado pessoal é publicado.
 
 A navegação usa endereços simples como `#inicio`, `#visao-geral`, `#consultas`, `#consulta/2`, `#acompanhamento` e `#regras`. Voltar/avançar do navegador funciona entre telas. O código continua apenas em memória: **recarregar exige entrar novamente e retoma o endereço aberto**. Sair limpa o acesso e volta à tela de entrada; um novo login sem endereço específico abre a tela inicial do perfil. Endereços de consulta inexistente mostram uma orientação; moradores não acessam tarefas da gestão.
 
@@ -198,13 +200,13 @@ HTML/CSS/JavaScript, API HTTP em Python e SQLite. Nenhuma dependência foi adici
 - Uma a seis perguntas, duas a seis opções por pergunta, uma opção por pergunta. Prazo, custo e impactos opcionais. Prazo publicado encerra a aceitação de respostas ao fim desse dia conforme o relógio do servidor; a gestão encerra a consulta para liberar a contagem.
 - Resultados indisponíveis na API enquanto a consulta está aberta, inclusive para a gestão. Uma consulta encerrada rejeita novas participações. Votação, rotação e encerramento usam transações; o código é revalidado dentro da transação.
 - Encaminhamento persistente com decisão, próximo passo, status, área responsável, próximo retorno e previsão de conclusão. Próximo retorno é a próxima atualização; conclusão é a previsão de finalizar o assunto.
-- Referências oficiais preservadas do portal da Câmara dos Deputados, conferidas em 10/11/2026. Título, fonte e data da norma aparecem na interface. O catálogo de referências e documentos continua estático em `resources()` no arquivo `public/app.js`.
+- Referências oficiais preservadas do portal da Câmara dos Deputados, conferidas em 10/11/2026. Título, fonte e data da norma aparecem na interface. As referências gerais permanecem em `resources()` no arquivo `public/app.js`. O regulamento é lido da fonte única `data/regulamento.json` pelo servidor.
 
 O protótipo escuta só em `127.0.0.1` por padrão. Quem acessa o banco pode relacionar respostas à residência; não há promessa de anonimato. Uso pela internet exigiria HTTPS, autenticação individual da gestão, controle de tentativas, expiração, backups, auditoria e política de retenção. Cada instalação representa um único residencial.
 
 ## Assistente do morador
 
-Implementado na branch local **`assistente-morador`**, a partir da versão visual atual. A única adição nas telas existentes é o link **Assistente** no fim do menu do morador. Login, Início, Consultas, Regras, solicitações, painel da gestão, tour e estilos globais permanecem iguais. O CSS não precisou ser alterado. O Git estava limpo antes desta etapa; capturas de referência foram feitas antes das mudanças.
+Disponível na branch local **`assistente-gemini`**, como botão e painel flutuante exclusivos do morador autenticado. O antigo link Assistente foi substituído pelo botão. Login, Início, Consultas, Regras, solicitações, painel da gestão, tour e estilos globais permanecem iguais. Os estilos novos estão isolados em `public/assistant.css`. O Git estava limpo antes desta etapa; capturas de referência foram feitas antes das mudanças.
 
 A fila de limpeza já existia e foi reutilizada sem mudar nenhuma tela da gestão.
 
@@ -214,15 +216,15 @@ Pare o servidor antigo com **Control+C** antes de iniciar: os endpoints novos ex
 
 ```sh
 cd ~/Downloads/PR-GlobalSolution
-git switch assistente-morador
+git switch assistente-gemini
 RESIDENCIAL_DB=/tmp/pr-assistente-demo.sqlite3 python3 demo.py
 ```
 
 Abra http://127.0.0.1:8000 e recarregue com **⌘R**. Se precisar manter outro servidor aberto, acrescente `RESIDENCIAL_PORT=8001` e use http://127.0.0.1:8001. Para usar registros antigos, mantenha `RESIDENCIAL_DB` apontando para o arquivo desejado; a migração acrescenta somente a tabela `assistant_drafts` e não reescreve consultas, votos ou chamados.
 
-1. Entre com `demo-morador-1` e abra **Assistente**.
-2. Em **Tirar uma dúvida**, pergunte, por exemplo, “O que foi decidido sobre iluminação?”. A tela mostra a resposta ou os links relevantes, com trechos e acesso à origem. Uma dúvida sem informação publicada recebe essa indicação. Documentos ainda indisponíveis e contatos não publicados não são inventados.
-3. Escolha **Solicitar limpeza**, escreva **A academia está suja** e clique em **Preparar chamado**. Se escrever apenas “Está suja”, será pedido o local; se escrever apenas “Academia”, será pedida a descrição.
+1. Entre com `demo-morador-1` e clique no botão verde **Pergunte ao assistente**.
+2. No campo **Mensagem**, pergunte, por exemplo, “O que foi decidido sobre iluminação?”. A tela mostra a resposta ou os links relevantes, com trechos e acesso à origem. Uma dúvida sem informação publicada recebe essa indicação. Documentos ainda indisponíveis e contatos não publicados não são inventados.
+3. Envie **A academia está suja** no chat ou escolha **Solicitar limpeza** para preencher manualmente o local e a descrição. Clique em **Preparar chamado** para validar o resumo no servidor.
 4. Confira o resumo. Local e descrição são editáveis; a equipe de destino é derivada da regra no servidor e não pode ser trocada pelo navegador. **Preparar o resumo ainda não registra uma solicitação nem cria uma OS.**
 5. Clique em **Confirmar chamado**. O protocolo aparece em **Meus chamados**, dentro do assistente, como Pendente. Repetir a confirmação do mesmo resumo retorna o mesmo protocolo, inclusive em cliques concorrentes ou após falha na resposta de rede.
 6. Entre como `demo-gestao`, abra a **Fila de limpeza** existente e conclua a tarefa com **Aparelhos higienizados**.
@@ -241,20 +243,17 @@ cp config/gemini.env.example .env
 open -e .env
 ```
 
-Substitua os dois valores fictícios pelas configurações da **sua conta do PR**: `GEMINI_API_KEY` e `GEMINI_MODEL` (identificador de um modelo disponível na sua conta). Nunca use a chave de outro projeto. Salve e inicie o servidor no mesmo Terminal:
+Substitua os dois valores fictícios pelas configurações da **sua conta do PR**: `GEMINI_API_KEY` e `GEMINI_MODEL` (identificador de um modelo disponível na sua conta). Nunca use a chave de outro projeto. Salve e inicie o servidor; o PR carrega as duas variáveis do `.env` local automaticamente:
 
 ```sh
-set -a
-source .env
-set +a
 python3 demo.py
 ```
 
-Abra http://127.0.0.1:8000, entre com `demo-morador-1` e escolha **Assistente**. Pare qualquer servidor anterior com Ctrl+C antes de reiniciar para carregar o código e o ambiente novos. A aplicação não lê `.env` automaticamente; o comando `source` acima o carrega. O arquivo está ignorado pelo Git. Não coloque chave em JavaScript, logs ou commits. Nenhuma dependência Python adicional é necessária.
+Abra http://127.0.0.1:8000, entre com `demo-morador-1` e clique em **Pergunte ao assistente**. Pare qualquer servidor anterior com Ctrl+C antes de reiniciar para carregar o código e o ambiente novos. O PR lê somente `GEMINI_API_KEY` e `GEMINI_MODEL` do `.env` desta pasta, sem executar shell. Variáveis já definidas no processo têm prioridade, inclusive valores vazios usados para testar o modo local. Não há modelo padrão: configure explicitamente um identificador disponível na sua conta. O arquivo está ignorado pelo Git. Não coloque chave em JavaScript, logs ou commits. Nenhuma dependência Python adicional é necessária.
 
 O adaptador usa o [generateContent oficial do Gemini](https://ai.google.dev/api/generate-content), com a chave exclusivamente no cabeçalho `x-goog-api-key`, timeout de 12 segundos, limite de saída e sem ferramentas. Foram adaptados os padrões de validação, falha e origem da [rota do Happy Game Hub](https://github.com/katelouren/happy-game-hub-cyber/blob/692d0aabd65e56d25d6b29d77357d0d604bd0eb3/app/api/assistant/route.js); nenhuma chave foi acessada ou reutilizada.
 
-Envia somente a pergunta e até cinco trechos relevantes permitidos ao morador. Não envia convites, identificadores de residência, votos individuais, chamados privados ou fila da gestão. Não escreva dados pessoais na pergunta, que é enviada ao provedor. Resultados e devolutivas de consultas abertas não entram nas fontes. Links são construídos pelo servidor a partir dos registros, nunca aceitos da IA. Bloqueios, saídas incompletas, texto vazio, citações desconhecidas e URLs geradas acionam orientações locais. O Gemini recebe instruções para informar dados ausentes, sem inventar decisões, prazos, regras ou contatos; a geração não é uma garantia factual, por isso as fontes permanecem visíveis.
+Envia somente a pergunta e até cinco trechos relevantes permitidos ao morador. Não envia convites, identificadores de residência, votos individuais, chamados privados ou fila da gestão. Não escreva dados pessoais na pergunta, que é enviada ao provedor. Resultados e devolutivas de consultas abertas não entram nas fontes. Na consulta ao regulamento, somente os artigos selecionados pelo servidor entram na redação opcional; status de chamados são lidos por residência e nunca são enviados ao Gemini. Links são construídos pelo servidor a partir dos registros, nunca aceitos da IA. Bloqueios, saídas incompletas, texto vazio, citações desconhecidas e URLs geradas acionam orientações locais. O Gemini recebe instruções para informar dados ausentes, sem inventar decisões, prazos, regras ou contatos; a geração não é uma garantia factual, por isso as fontes permanecem visíveis.
 
 O preenchimento de limpeza é **local e determinístico**: reconhece Academia, permite revisar descrição e local, e o servidor determina a equipe. Nenhuma chamada Gemini é necessária para registrar ou concluir uma OS. Só a confirmação cria a solicitação e sua tarefa na fila existente.
 
@@ -264,7 +263,7 @@ O preenchimento de limpeza é **local e determinístico**: reconhece Academia, p
 python3 tests/gemini_real.py
 ```
 
-Esse teste usa banco temporário, a rota autenticada real e uma pergunta sobre iluminação. Só informa sucesso quando recebe `mode=live`; indisponibilidade não é contada como sucesso. Para testar pelo navegador, pergunte “O que foi decidido sobre iluminação?” e confira a origem. Pergunte “Qual o telefone da administração?”: o contato está A informar e a resposta deve reconhecer essa ausência. Sem as variáveis, reinicie o servidor e confirme **Orientações locais do PR**.
+Esse teste usa banco temporário, a rota autenticada real e as quatro perguntas de eventos/canal/devolutiva/horário. Só informa sucesso quando todas recebem `mode=live`; indisponibilidade não é contada como sucesso. Para testar pelo navegador, pergunte “O que foi decidido sobre iluminação?” e confira a origem. Pergunte “Qual o telefone da administração?”: o contato está A informar e a resposta deve reconhecer essa ausência. Sem as variáveis, reinicie o servidor e confirme **Orientações locais do PR**.
 
 ### Onde está o código
 
@@ -272,7 +271,7 @@ Esse teste usa banco temporário, a rota autenticada real e uma pergunta sobre i
 - `assistente.py`: `fontes_publicadas()` filtra dados permitidos; `responder_duvida()` seleciona fontes e usa IA opcional; `preparar_limpeza()` pede dados ausentes e guarda somente o rascunho; `confirmar_limpeza()` confere a residência e chama o fluxo existente.
 - `server.py`: novos endpoints `/api/assistant/question`, `/api/assistant/cleaning/preview` e `/api/assistant/cleaning/confirm`. Os dois últimos passam pela transação e revalidação do código já existentes. A redação por IA ocorre fora da transação de escrita.
 - `solicitacoes.py` e `encaminhamento.py`: reutilizados sem alterações para equipe, solicitação, ordem e fila.
-- `public/app.js`: `assistantPage()` monta somente a tela nova. As outras mudanças são a rota, o rótulo da seção e o único link novo no menu do morador.
+- `public/assistant.js` e `public/assistant.css`: painel flutuante e estilos isolados, sugestões, conversa e resumo editável. `public/app.js` integra o ciclo de autenticação; o antigo item Assistente foi substituído pelo botão. O endereço antigo `#assistente` abre o painel sobre o Início.
 
 `assistant_drafts` vincula um token imprevisível à residência e, após confirmar, ao chamado criado. A gravação da solicitação, da OS e desse vínculo acontece na mesma transação. Se uma gravação falhar, tudo é revertido; a nova tentativa pode usar o mesmo token. O servidor não confia em residência, equipe ou status enviados pelo navegador.
 
@@ -288,7 +287,7 @@ Nesta integração, **21 testes Python passaram**. Foram simulados contrato Gemi
 
 O teste Python cobre dados ausentes, resumo editável, confirmação explícita, quatro confirmações concorrentes com uma única OS, troca de código, perfis, isolamento, rollback, fontes permitidas e fallback da IA. O teste Chromium cobre o roteiro completo com a fila existente e o segundo morador, sem IA externa, em 375 e 1280 px. Todos usam bancos temporários.
 
-`tests/assistente-visual.cjs` captura ou compara as telas anteriores. Antes da edição, use `PR_VISUAL_BASELINE=/pasta/de/referencia`; depois, acrescente `PR_VISUAL_COMPARE=1`. A comparação desconsidera apenas o link Assistente autorizado. Nesta etapa, **11 capturas ficaram idênticas**: login desktop/celular, Início/Consultas/detalhe/solicitações/regras do morador, boas-vindas, Visão geral, Convites e Fila da gestão. O diff foi revisado para manter intactos os estilos globais e os arquivos visuais anteriores.
+`tests/assistente-visual.cjs` captura ou compara as telas anteriores. Antes da edição, use `PR_VISUAL_BASELINE=/pasta/de/referencia`; depois, acrescente `PR_VISUAL_COMPARE=1`. A comparação desconsidera apenas o antigo link Assistente e o novo componente flutuante autorizado. Nesta etapa, **11 capturas ficaram idênticas**: login desktop/celular, Início/Consultas/detalhe/solicitações/regras do morador, boas-vindas, Visão geral, Convites e Fila da gestão. O diff foi revisado para manter intactos os estilos globais e os arquivos visuais anteriores.
 
 ## Verificação
 
@@ -320,10 +319,106 @@ A suíte Python inclui a automação em `tests/test_solicitacoes.py`: criação 
 - **WhatsApp:** link direto à consulta compartilhada, mantendo autenticação e uma participação por residência. Nenhum envio foi configurado.
 - **Orçamento e reservas:** saldo informado pela gestão, data de referência e valores comprometidos, quando disponíveis.
 - **Evolução das solicitações privadas:** o caso de higiene da academia já funciona com protocolo, equipe, status e devolutiva. Ficam para depois outros locais/categorias, histórico de alterações, prazos de retorno, alertas e integração com agenda externa.
-- **Relatório mensal de IA:** temas recorrentes em solicitações e sugestões, com propostas de enquetes, reuniões ou ações junto às áreas responsáveis. Cada sugestão deverá apresentar sua base, trabalhar com dados agregados e passar por revisão humana antes de qualquer envio. Nenhum serviço de IA foi conectado.
+- **Relatório mensal de IA:** temas recorrentes em solicitações e sugestões, com propostas de enquetes, reuniões ou ações junto às áreas responsáveis. Cada sugestão deverá apresentar sua base, trabalhar com dados agregados e passar por revisão humana antes de qualquer envio. O relatório mensal ainda não está conectado à IA.
 
-O trabalho é local. Não há publicação na internet, envio de mensagens ou integração externa de IA.
+O trabalho é local, sem publicação na internet ou envio de mensagens. O Gemini é chamado somente pelo servidor quando configurado.
 
 ## Entrega acadêmica
 
 Complemente com evidências do problema observado, diagrama de arquitetura e justificativa das tecnologias e do ODS 11. Use apenas dados fictícios na apresentação.
+
+## Assistente flutuante — atualização de 12/11/2026
+
+Disponível somente para o morador autenticado, sobre a página e sem mudar a rota. O botão verde abre **Assistente do Residencial**; Esc ou fechar devolve o foco ao botão. Há três sugestões clicáveis, balões, indicação de origem, fontes do servidor, prévia manual e acompanhamento. Fechar preserva a conversa em memória; sair ou recarregar limpa a conversa. Chamados confirmados permanecem no banco.
+
+O painel acompanha `visualViewport` para adaptar o campo ao teclado móvel. O botão fechado desloca-se para cima ao detectar controles da página sob ele. No celular, fica oculto enquanto o menu está aberto. O CSS global e a interface da gestão permanecem intactos.
+
+Validação desta atualização: 21 testes Python; Chrome em 1280 px e 375 px, alturas 900/812/568 e viewport reduzida a 360 px para simular espaço do teclado. Fluxo sem chave e Gemini simulado, dúvida com fonte, ausência de dados, Esc/foco, sobreposição do botão, chamado confirmado uma vez, fila operacional, conclusão e isolamento do segundo morador. As 11 telas anteriores foram comparadas com a referência e ficaram idênticas, excluindo somente o componente autorizado e o antigo link. Não houve teste em aparelho físico. Não havia chave/modelo no ambiente do PR nem arquivo `.env`; nenhuma chamada real ao Gemini foi executada. Referência técnica consultada somente em `app/api/assistant/route.js`, `src/components/AssistantChat.jsx` e `AssistantLauncher.jsx` do Happy Game Hub local, sem abrir suas credenciais.
+
+Capturas: `docs/screenshots/assistente-flutuante-desktop.png`, `assistente-flutuante-mobile.png` e `assistente-flutuante-retorno-mobile.png`. Para usar Chrome instalado nos testes, defina `PR_BROWSER="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"` antes dos comandos Node acima.
+
+## Regulamento interno no assistente e em Regras e contatos
+
+A fonte única é [`data/regulamento.json`](data/regulamento.json): **Regulamento Interno do Residencial Horizonte**, código **RH-RI-001**, versão **1.0**, de **12/11/2026**. Os 12 artigos são material fictício para a demonstração acadêmica da FIAP, GS2 CitizenTech. Não representam regras de um condomínio real.
+
+O servidor publica o documento pela rota autenticada `GET /api/regulation`. A tela **Regras e contatos → Ler regulamento** e as fontes do assistente usam esse mesmo arquivo. `#regras/regulamento` abre o documento completo; `#regras/artigo/3` abre e foca o art. 3º, preservando Voltar/Avançar e a retomada do link após entrar. Não é necessário migrar ou apagar bancos.
+
+Para alterar o documento, edite `title`, `version`, `date` (formato `AAAA-MM-DD`), `notice` e os artigos (`number`, `title`, `text`) no JSON. Preserve os números dos artigos existentes para manter os links. Atualize versão e data ao mudar uma regra; não duplique horários ou prazos no JavaScript. O servidor relê o JSON; recarregue o navegador e entre novamente para atualizar o documento em uma sessão já aberta. A busca por assuntos/sinônimos está em `regulamento.py`; se acrescentar um assunto novo, acrescente sua recuperação e um teste. A consulta direta por número de artigo usa o conteúdo do arquivo.
+
+### Demonstrar no Mac
+
+```sh
+cd ~/Downloads/PR-GlobalSolution
+RESIDENCIAL_DB=/tmp/pr-regulamento-demo.sqlite3 python3 demo.py
+```
+
+Abra http://127.0.0.1:8000 e entre com `demo-morador-1`. Use **Pergunte ao assistente**:
+
+| Pergunta | Resultado esperado sem Gemini |
+| --- | --- |
+| Até que horas posso ficar no salão de festas? | Até 22h; art. 3º e link para o artigo |
+| Quanto tempo antes preciso reservar o salão? | Três dias corridos; art. 4º |
+| Quanto custa reservar o salão? | Valor ausente no regulamento; Administração em Regras e contatos |
+| Que horas a academia abre? | Das 6h às 22h; art. 5º |
+| Como peço limpeza? | Procedimento do art. 7º, sem abrir chamado |
+| Qual o horário de funcionamento? | Pergunta se a dúvida é sobre salão ou academia |
+| A academia precisa de limpeza | Resumo editável; preparar e confirmar antes de registrar |
+| Quais consultas estão abertas? | Consultas abertas nos registros atuais, sem usar regras para inventar status |
+| O que foi decidido sobre iluminação? | Decisão publicada na consulta correta |
+| Qual o status do meu chamado SOL-…? | Apenas o atendimento da residência autenticada, sem Gemini |
+
+Sem `GEMINI_API_KEY` e `GEMINI_MODEL` no processo Python, o chat responde com os trechos recuperados e a indicação **Orientações locais do PR**. Para demonstrar com Gemini, configure uma chave própria do PR conforme **Gemini opcional no servidor**, reinicie o servidor e repita as perguntas. O modelo só pode redigir a partir dos artigos selecionados; o documento, a versão, o artigo e o link são referências fornecidas pelo servidor. Se o provedor falhar, os mesmos fatos continuam disponíveis localmente. Chave e modelo permanecem no ambiente do servidor. Não copie chaves de outro projeto.
+
+Para limpeza, use dados fictícios, confirme e anote o protocolo. Entre como `demo-gestao` para conferir a **Fila de limpeza**; `demo-morador-2` não poderá consultar o protocolo da primeira residência. Nesta demo, o fluxo operacional disponível continua restrito à higiene da Academia, mesmo que o regulamento descreva pedidos de áreas comuns em geral. Não há criação automática de reserva do salão ou de chamado por uma pergunta informativa.
+
+### Testes do regulamento
+
+```sh
+python3 -m unittest discover -s tests -v
+NODE_PATH=/tmp/residencial-browser/node_modules node tests/regulamento-ui.cjs
+PR_GEMINI_FAILURE=1 NODE_PATH=/tmp/residencial-browser/node_modules node tests/regulamento-ui.cjs
+```
+
+Os testes de navegador exigem Playwright/Chrome conforme a seção de verificação. No Mac, se necessário, acrescente `PR_BROWSER="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"` antes do comando Node. O modo de falha usa `tests/gemini_stub_server.py` e provoca timeout simulado, sem rede externa. Os testes Python também simulam uma resposta Gemini bem-sucedida e verificam os trechos enviados, a referência do servidor e o fallback.
+
+Nesta atualização, o Gemini foi **apenas simulado**, sem chamada real: não há chave/modelo configurados para o PR no ambiente verificado nem arquivo `.env`. Os testes usam bases temporárias fictícias; as bases locais existentes e as alterações do painel flutuante foram preservadas. As alterações ficam disponíveis para revisão, sem commit ou push.
+
+Resultado da verificação do regulamento em 12/11/2026: **27 testes Python aprovados**, cinco suítes existentes de navegador aprovadas (`ui`, `limpeza-ui`, `gestao-ui`, `sistema-ui`, `assistente-ui`), suíte do regulamento sem chave e com falha Gemini simulada aprovada, e painel também aprovado com Gemini simulado. A expectativa antiga do teste de menu foi atualizada para o botão flutuante já existente. Capturas das telas atuais foram geradas pelo teste visual em pasta temporária; a tela de Regras e contatos agora contém a publicação autorizada do regulamento. Verificações de sintaxe Python/JavaScript e `git diff --check` passaram. Não houve teste em celular físico.
+
+## Eventos e diagnóstico do Gemini — 13/11/2026
+
+Reprodução inicial: **Quem cuida dos eventos?** respondeu em `mode=local` com fontes de calendário de eventos, catálogo de canais e documentos. O catálogo publicava Associação para Eventos e atividades, enquanto o ranqueamento priorizava uma consulta. Agora **Eventos** publica **Administração e Diretoria Social**, sem dividir funções ou inventar contatos; o contato continua **A informar**.
+
+A fonte única de canais é `data/canais.json`, lida por `canais.py` e pela rota autenticada `/api/channels`. O portal e o assistente consomem os mesmos responsáveis e contatos. A aparência e o menu permanecem iguais; somente o conteúdo do canal foi atualizado.
+
+| Pergunta | Fonte pertinente | Primeira informação no modo local |
+| --- | --- | --- |
+| Quem cuida dos eventos? | Canais por assunto → Eventos | Administração e Diretoria Social são as áreas responsáveis |
+| Com quem eu falo sobre festas? | Canais por assunto → Eventos | As mesmas áreas; contato ainda A informar |
+| O que a gestão decidiu sobre o evento? | Devolutiva da consulta correspondente | Decisão publicada ou indicação de que a devolutiva ainda não foi publicada |
+| Até que horas posso usar o salão? | Regulamento v1.0, art. 3º | Uso até as 22h |
+
+Havendo mais de uma consulta de evento encerrada e uma pergunta genérica, o assistente pede o nome da consulta. Sem devolutiva correspondente, informa a ausência e indica o canal Eventos publicado, em vez de reutilizar fontes sem relação. O Gemini recebe somente o canal ou trecho de devolutiva/artigo escolhido pelo servidor, com instrução de responder na primeira frase, em até três frases, sem atribuir funções adicionais às áreas.
+
+### Distinguir real, local e simulado
+
+- **Real:** configure a chave própria e `GEMINI_MODEL` no `.env` do PR (ou no ambiente), inicie `python3 demo.py` novamente e veja **Resposta do Gemini** no chat. A API retorna `provider=gemini`, `mode=live`, `unavailable=false` somente após uma resposta válida do provedor. Nenhuma chave é mostrada no navegador ou em logs.
+- **Local:** o chat mostra **Orientações locais do PR** e a API retorna `mode=local`. Falta de chave/modelo, falha, bloqueio ou resposta inválida mantêm a orientação local; `provider=gemini` sozinho não comprova chamada real.
+- **Simulado:** os testes com `tests/gemini_stub_server.py` substituem a rede; podem retornar `mode=live`, mas a saída do teste identifica **SIMULADO**. Não contam como validação real.
+
+```sh
+python3 tests/gemini_real.py
+```
+
+O teste real usa banco temporário fictício e as quatro perguntas da tabela, sem ler chamados de moradores. Só retorna sucesso completo se as quatro chamadas forem `live` e tiverem a fonte pertinente. Sem configuração, termina com código 2 e **NÃO EXECUTADO**; fallback em alguma pergunta termina com código 1, sem ser contado como sucesso real. Ele imprime perguntas públicas, modo e fonte, nunca a chave. `demo.py`, `server.py` e esse teste usam `configuracao.carregar_gemini()`; não copiam credenciais de outros projetos nem executam o conteúdo do `.env`.
+
+```sh
+python3 -m unittest discover -s tests -v
+NODE_PATH=/tmp/residencial-browser/node_modules node tests/eventos-ui.cjs
+PR_EVENTS_SIMULATED=1 NODE_PATH=/tmp/residencial-browser/node_modules node tests/eventos-ui.cjs
+PR_GEMINI_FAILURE=1 NODE_PATH=/tmp/residencial-browser/node_modules node tests/eventos-ui.cjs
+```
+
+Use `PR_BROWSER="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"` se necessário. Os testes mantêm bancos fictícios e modos simulados separados da chamada real. O fluxo de limpeza continua exigindo preparar, revisar e confirmar antes de criar um protocolo e uma ordem na fila operacional.
+
+Validação de 13/11/2026: **32 testes Python**, as cinco regressões de navegador existentes e a suíte de regulamento passaram. As quatro perguntas da tabela passaram no navegador em modo local, com Gemini simulado e com falha simulada. O teste real foi invocado e terminou com **NÃO EXECUTADO (código 2)**: naquele momento não havia chave/modelo no ambiente disponível nem `.env` próprio do PR. O usuário informou que iria configurar; a validação real permanece pendente até o arquivo estar pronto. Nenhum sucesso simulado foi contado como real. A limpeza foi validada até a conclusão pela gestão, com protocolo único e privacidade da residência.

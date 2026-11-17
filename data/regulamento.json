@@ -1,0 +1,69 @@
+{
+  "code": "RH-RI-001",
+  "title": "Regulamento Interno do Residencial Horizonte",
+  "version": "1.0",
+  "date": "2026-11-12",
+  "notice": "Material fictício para a demonstração acadêmica da FIAP, GS2 CitizenTech.",
+  "articles": [
+    {
+      "number": 1,
+      "title": "Objetivo",
+      "text": "Este regulamento estabelece regras para o uso das áreas comuns, o encaminhamento de solicitações e a participação dos moradores nas consultas do Residencial Horizonte."
+    },
+    {
+      "number": 2,
+      "title": "Responsabilidade pelo uso",
+      "text": "Moradores e convidados devem preservar os espaços compartilhados e respeitar os horários de funcionamento. O morador responsável pela reserva deve orientar seus convidados sobre as regras do espaço."
+    },
+    {
+      "number": 3,
+      "title": "Horário do salão de festas",
+      "text": "O salão de festas pode ser utilizado das 9h às 22h, todos os dias, mediante reserva confirmada. A saída dos convidados e a retirada dos materiais devem ocorrer até as 22h."
+    },
+    {
+      "number": 4,
+      "title": "Reserva do salão de festas",
+      "text": "O pedido deve ser encaminhado à Administração com pelo menos três dias corridos de antecedência. A reserva depende da disponibilidade do espaço e da confirmação da Administração."
+    },
+    {
+      "number": 5,
+      "title": "Uso da academia",
+      "text": "A academia funciona das 6h às 22h, todos os dias. Após o uso, o morador deve higienizar os equipamentos utilizados e guardar os acessórios nos locais indicados."
+    },
+    {
+      "number": 6,
+      "title": "Entrega dos espaços",
+      "text": "Ao terminar o uso, o morador deve recolher o lixo, retirar seus pertences e deixar o espaço organizado. Necessidades de limpeza adicional podem ser comunicadas pelo portal."
+    },
+    {
+      "number": 7,
+      "title": "Registro do pedido de limpeza",
+      "text": "O morador pode solicitar a limpeza de uma área comum em “Minhas solicitações” ou pelo Assistente do Residencial. O pedido deve indicar o local e descrever o que precisa de atenção."
+    },
+    {
+      "number": 8,
+      "title": "Confirmação e protocolo",
+      "text": "No assistente, o morador pode revisar e editar o resumo antes de confirmar. Após a confirmação, o sistema registra o chamado, gera um protocolo e encaminha o pedido à fila operacional."
+    },
+    {
+      "number": 9,
+      "title": "Acompanhamento do chamado",
+      "text": "O morador pode consultar o andamento dos chamados da sua residência em “Minhas solicitações”. O protocolo identifica o atendimento. O prazo de execução depende da avaliação da equipe responsável."
+    },
+    {
+      "number": 10,
+      "title": "Participação nas consultas",
+      "text": "Cada residência pode enviar uma participação por consulta, dentro do prazo publicado no portal. O morador seleciona uma opção por pergunta e confirma o envio."
+    },
+    {
+      "number": 11,
+      "title": "Publicação da devolutiva",
+      "text": "Após o encerramento, a gestão publica a devolutiva em “Acompanhamento”, com a decisão e os próximos passos. Quando houver nova atualização prevista, pode informar a área responsável e a data. Até a publicação, o portal exibe “Aguardando devolutiva”."
+    },
+    {
+      "number": 12,
+      "title": "Dúvidas e orientações",
+      "text": "Dúvidas sobre reservas e uso das áreas comuns devem ser encaminhadas à Administração, pelo canal indicado em “Regras e contatos”. Quando o regulamento não tratar do assunto, a Administração é o canal para confirmar a orientação aplicável."
+    }
+  ]
+}

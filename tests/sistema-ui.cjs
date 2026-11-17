@@ -41,7 +41,8 @@ async function stop() {
   const sidebar=page.locator('#navigation');const sidebox=await sidebar.boundingBox();const mainbox=await page.locator('#main').boundingBox();
   assert.equal(sidebox.x,0);assert.ok(sidebox.width>=220 && sidebox.width<=300);assert.ok(mainbox.x>=sidebox.width);
   assert.equal(await sidebar.evaluate(node=>getComputedStyle(node).position),'fixed');
-  assert.deepEqual(await page.getByRole('navigation').getByRole('link').allTextContents(),['Início','Consultas','Acompanhamento','Minhas solicitações','Regras e contatos','Assistente']);
+  assert.deepEqual(await page.getByRole('navigation').getByRole('link').allTextContents(),['Início','Consultas','Acompanhamento','Minhas solicitações','Regras e contatos']);
+  assert.ok(await page.getByRole('button',{name:'Pergunte ao assistente',exact:true}).isVisible());
   assert.ok(await page.getByRole('heading',{name:'Como usar o sistema',exact:true}).isVisible());
   assert.equal(await page.locator('.usage-guide .guide-step').count(),4);
   assert.equal(await page.locator('body.admin').count(),0);

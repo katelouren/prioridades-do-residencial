@@ -12,7 +12,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 from solicitacoes import criar_tabelas, criar_solicitacao, listar_solicitacoes, listar_fila_limpeza, concluir_ordem
-from assistente import criar_tabelas as criar_tabelas_assistente, preparar_limpeza, confirmar_limpeza, fontes_publicadas, responder_duvida
+from assistente import criar_tabelas as criar_tabelas_assistente, preparar_limpeza, confirmar_limpeza, fontes_publicadas, responder_duvida, responder_status, _texto
+from regulamento import documento as documento_regulamento
+from canais import catalogo as catalogo_canais
+from configuracao import carregar_gemini
+
+carregar_gemini()
 
 ROOT = Path(__file__).resolve().parent
 DATABASE = os.environ.get("RESIDENCIAL_DB", str(ROOT / "residencial.sqlite3"))
@@ -188,6 +193,8 @@ class Handler(BaseHTTPRequestHandler):
             "/": ("index.html", "text/html"),
             "/app.js": ("app.js", "text/javascript"),
             "/style.css": ("style.css", "text/css"),
+            "/assistant.js": ("assistant.js", "text/javascript"),
+            "/assistant.css": ("assistant.css", "text/css"),
         }
         if path in assets:
             name, mime = assets[path]
@@ -213,6 +220,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.error(401, "Use um código de acesso válido.")
                 return
             if self.command == "GET":
+                if path == "/api/channels":
+                    self.send(200, catalogo_canais())
+                    return
+                if path == "/api/regulation":
+                    self.send(200, documento_regulamento())
+                    return
                 request_match = re.fullmatch(r"/api/requests/(SOL-[A-F0-9]{12})", path)
                 cleaning_match = re.fullmatch(r"/api/cleaning/(SOL-[A-F0-9]{12})", path)
                 if path == "/api/requests" or request_match:
@@ -259,7 +272,13 @@ class Handler(BaseHTTPRequestHandler):
                     if admin:
                         raise PermissionError()
                     # A IA recebe só as fontes permitidas; rede fora de transação de escrita.
-                    result = responder_duvida(data.get("question"), fontes_publicadas(list_surveys(db, hashed)))
+                    question = _texto(data.get("question"), 'a dúvida')
+                    residence = db.execute("SELECT residence_id FROM invites WHERE code_hash=? AND active=1", (hashed,)).fetchone()
+                    if residence is None:
+                        raise PermissionError()
+                    result = responder_status(db, residence["residence_id"], question)
+                    if result is None:
+                        result = responder_duvida(question, fontes_publicadas(list_surveys(db, hashed)))
                     self.send(200, result)
                     return
                 with db:

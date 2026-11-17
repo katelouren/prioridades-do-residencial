@@ -3,8 +3,11 @@ import json
 import os
 from pathlib import Path
 import runpy
+from configuracao import carregar_gemini
 from contextlib import closing
 from datetime import date, timedelta
+
+carregar_gemini()
 
 root = Path(__file__).resolve().parent
 os.environ.setdefault('RESIDENCIAL_DB', str(root / 'demo-gs2.sqlite3'))

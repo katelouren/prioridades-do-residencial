@@ -1,0 +1,8 @@
+{
+  "notice": "Contatos do residencial fictício. Nenhum dado pessoal é publicado.",
+  "channels": [
+    {"id": "limpeza", "subject": "Limpeza e manutenção", "owners": ["Administração"], "contact": "A informar"},
+    {"id": "eventos", "subject": "Eventos", "owners": ["Administração", "Diretoria Social"], "contact": "A informar"},
+    {"id": "acompanhamento", "subject": "Acompanhamento e prestação de contas", "owners": ["Conselho"], "contact": "A informar"}
+  ]
+}

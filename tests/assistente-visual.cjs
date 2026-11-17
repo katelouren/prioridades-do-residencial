@@ -21,7 +21,7 @@ async function stop() {
   if(!child || child.exitCode!==null)return;
   await new Promise(resolve=>{child.once('exit',resolve);child.kill('SIGTERM');});
 }
-// Captura ou compara telas anteriores, desconsiderando apenas o link novo autorizado.
+// Captura ou compara telas anteriores, ocultando somente o componente e o antigo link do assistente.
 (async()=>{
   const url=await start();browser=await chromium.launch({headless:true,...(process.env.PR_BROWSER?{executablePath:process.env.PR_BROWSER}:{})});
   const context=await browser.newContext({viewport:{width:1280,height:900},deviceScaleFactor:1});const page=await context.newPage();page.setDefaultTimeout(6000);
@@ -29,10 +29,17 @@ async function stop() {
   if(!folder)throw new Error('Informe PR_VISUAL_BASELINE para a pasta das capturas de referência.');
   fs.mkdirSync(folder,{recursive:true});
   const capture=async name=>{
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    await page.waitForTimeout(100);
     const entry=page.locator('#navigation a[href="#assistente"]');if(await entry.count())await entry.evaluate(node=>{node.hidden=true;});
+    const assistant=page.locator('#pr-assistant');if(await assistant.count())await assistant.evaluate(node=>{node.hidden=true;});
     const file=path.join(folder,name+'.png');const png=await page.screenshot({fullPage:true,animations:'disabled'});
-    if(process.env.PR_VISUAL_COMPARE==='1')assert.ok(fs.readFileSync(file).equals(png),`Tela preservada: ${name}`);else fs.writeFileSync(file,png);
+    if(process.env.PR_VISUAL_COMPARE==='1') {
+      if(!fs.readFileSync(file).equals(png))fs.writeFileSync(path.join(folder,name+'-actual.png'),png);
+      assert.ok(fs.readFileSync(file).equals(png),`Tela preservada: ${name}`);
+    } else fs.writeFileSync(file,png);
     if(await entry.count())await entry.evaluate(node=>{node.hidden=false;});
+    if(await assistant.count())await assistant.evaluate(node=>{node.hidden=false;});
   };
   const login=async code=>{await page.getByLabel('Código de acesso',{exact:true}).fill(code);await page.getByRole('button',{name:'Entrar',exact:true}).click();await page.waitForFunction(()=>Boolean(document.querySelector('#navigation nav')));};
   const go=async(hash,title)=>{await page.goto(url+'#'+hash);await page.getByRole('heading',{level:1,name:title,exact:true}).waitFor();};
@@ -44,5 +51,5 @@ async function stop() {
   await page.getByRole('button',{name:'Sair',exact:true}).click();await login('demo-gestao');await page.locator('#admin-intro').waitFor({state:'visible'});await capture('gestao-boas-vindas');
   await page.getByRole('button',{name:'Agora não',exact:true}).click();await capture('gestao-visao');await go('gestao/convites','Gerenciar convites');await capture('gestao-convites');
   await go('limpeza','Fila de limpeza');await capture('gestao-limpeza');
-  console.log(process.env.PR_VISUAL_COMPARE==='1' ? 'OK: 11 capturas idênticas à referência; apenas o link Assistente foi desconsiderado.' : 'OK: 11 capturas de referência salvas antes das alterações.');
+  console.log(process.env.PR_VISUAL_COMPARE==='1' ? 'OK: 11 capturas idênticas à referência; componente flutuante e antigo link Assistente desconsiderados.' : 'OK: 11 capturas de referência salvas antes das alterações.');
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{if(browser)await browser.close();await stop();fs.rmSync(tmp,{recursive:true,force:true});});
