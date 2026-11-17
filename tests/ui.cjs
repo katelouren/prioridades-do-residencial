@@ -36,16 +36,18 @@ async function stop() {
   const login=async code=>{
     await page.getByLabel('Código de acesso',{exact:true}).fill(code);
     await page.keyboard.press('Tab');await page.keyboard.press('Enter');
-    await page.getByRole('navigation',{name:'Navegação do portal'}).waitFor();await overflow();
+    await page.waitForFunction(()=>Boolean(document.querySelector('#navigation nav')));
+    if(await page.getByRole('button',{name:'Agora não',exact:true}).isVisible())await page.getByRole('button',{name:'Agora não',exact:true}).click();await overflow();
   };
-  const logout=async()=>{await page.getByRole('button',{name:'Sair',exact:true}).click();};
-  const nav=async name=>{await page.getByRole('navigation').getByRole('link',{name,exact:true}).click();await page.getByRole('heading',{level:1,name:name==='Consultas' ? /^(Consultas do residencial|Painel da gestão)$/ : name,exact:true}).waitFor();};
+  const logout=async()=>{if(!await page.getByRole('button',{name:'Sair',exact:true}).isVisible())await page.getByRole('button',{name:'Menu',exact:true}).click();await page.getByRole('button',{name:'Sair',exact:true}).click();};
+  const nav=async name=>{if(await page.getByRole('button',{name:'Menu',exact:true}).isVisible() && await page.getByRole('button',{name:'Menu',exact:true}).getAttribute('aria-expanded')==='false')await page.getByRole('button',{name:'Menu',exact:true}).click();await page.getByRole('navigation').getByRole('link',{name,exact:true}).click();await page.getByRole('heading',{level:1,name:name==='Consultas' ? /^(Consultas do residencial|Consultas)$/ : name,exact:true}).waitFor();};
   const open=async title=>{
     const card=page.locator('.survey-summary').filter({has:page.getByRole('heading',{name:title,exact:true})});
+    if(!await card.count())await nav('Consultas');
     await card.locator('a.primary').click();await page.getByRole('heading',{level:1,name:title,exact:true}).waitFor();await overflow();
   };
-  const back=async()=>{await page.getByRole('link',{name:'Voltar às consultas',exact:true}).first().click();await page.getByRole('heading',{level:1,name:/^(Consultas do residencial|Painel da gestão)$/}).waitFor();};
-  await page.goto(url);await screenshot('login-mobile');await login('demo-morador-1');
+  const back=async()=>{await page.getByRole('link',{name:'Voltar às consultas',exact:true}).first().click();await page.getByRole('heading',{level:1,name:/^(Consultas do residencial|Consultas)$/}).waitFor();};
+  await page.goto(url);await screenshot('login-mobile');await login('demo-morador-1');await nav('Consultas');
   await page.getByRole('heading',{level:1,name:'Consultas do residencial',exact:true}).waitFor();
   assert.equal(await page.locator('fieldset').count(),0,'Lista não apresenta formulários de votação');
   assert.equal(await page.locator('.survey-summary').count(),3);
@@ -119,7 +121,7 @@ async function stop() {
   await login(replacement);await open('Consulta do fluxo completo');
   assert.equal(await page.getByRole('button',{name:'Confirmar participação'}).count(),0);
   // Outro contexto/navegador mantém a regra da residência.
-  const second=await browser.newContext();const p2=await second.newPage();await p2.goto(url);
+  const second=await browser.newContext();const p2=await second.newPage();await p2.goto(url+'#consultas');
   await p2.getByLabel('Código de acesso',{exact:true}).fill(replacement);await p2.getByRole('button',{name:'Entrar',exact:true}).click();
   await p2.locator('.survey-summary').filter({hasText:'Consulta do fluxo completo'}).getByRole('link',{name:'Acompanhar consulta',exact:true}).waitFor();await second.close();
   await logout();await login('demo-gestao');await open('Consulta do fluxo completo');

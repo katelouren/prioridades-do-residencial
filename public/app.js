@@ -36,7 +36,13 @@ function message(text = '', error = false) {
   notice.textContent = text;
   if (error) notice.focus();
 }
-function focusPage() { document.querySelector('#main').focus(); }
+function focusPage() {
+  const article=route().match(/^regras\/artigo\/(\d+)$/);
+  const target=article && document.querySelector(`#regulation-article-${article[1]}`);
+  if(target){target.focus({preventScroll:true});target.scrollIntoView({block:'start'});return;}
+  document.querySelector('#main').focus();
+  if(model)window.scrollTo(0,0);
+}
 async function api(path, data, access = code) {
   const generation = sessionGeneration;
   const options = {headers:{Authorization:`Bearer ${access}`}};
@@ -69,8 +75,15 @@ function submit(form, label, action) {
   return button;
 }
 function route() { return location.hash.slice(1) || 'consultas'; }
+async function loadModel(access = code) {
+  const data = await api('/api/surveys', undefined, access);
+  const services = await api(data.admin ? '/api/cleaning' : '/api/requests', undefined, access);
+  const regulation=await api('/api/regulation',undefined,access);
+  const channels=await api('/api/channels',undefined,access);
+  return {...data, regulation, channels, requests: data.admin ? services.orders : services.requests};
+}
 async function refresh(text, to) {
-  model = await api('/api/surveys');
+  model = await loadModel();
   if (to) history.replaceState(null, '', `#${to}`);
   draw(); message(text); focusPage();
 }
@@ -99,6 +112,8 @@ function trackingState(survey) {
   return ['Em análise','Em andamento','Concluído'].includes(survey.subject_status) ? survey.subject_status : 'Retorno publicado';
 }
 function login() {
+  PRassistant.reset();
+  resetSystemShell();
   model = null;
   navigation.replaceChildren();
   logout.hidden = true;
@@ -119,10 +134,12 @@ function login() {
   const entry = field(form, 'Código de acesso', 'access', 'input', {type:'password',required:'',autocomplete:'off',placeholder:'Digite seu código'});
   submit(form, 'Entrar', async () => {
     const candidate = entry.value.trim();
-    const data = await api('/api/surveys', undefined, candidate);
+    const data = await loadModel(candidate);
     sessionGeneration += 1;
     code = candidate; model = data;
+    if (!location.hash) history.replaceState(null, '', data.admin ? '#visao-geral' : '#inicio');
     draw(); focusPage();
+    if (data.admin && !introDismissed()) showAdminIntro();
   });
   box.append(form, el('p', 'Ambiente de demonstração com dados fictícios.', {class:'demo-note'}));
   layout.append(intro, box); content.replaceChildren(layout);
@@ -150,7 +167,7 @@ function summary(survey, admin, level = 2) {
 }
 function dashboard() {
   const container = el('div');
-  container.append(heading(model.admin ? 'Painel da gestão' : 'Consultas do residencial',
+  container.append(heading(model.admin ? 'Consultas' : 'Consultas do residencial',
     model.admin ? 'Publique uma proposta, acompanhe a participação e dê retorno às residências.' : 'Conheça as propostas, participe e acompanhe as decisões da gestão.',
     model.admin ? 'ÁREA DA GESTÃO' : 'PORTAL DO MORADOR'));
   if (model.admin) {
@@ -171,9 +188,9 @@ function dashboard() {
   container.append(grid); return container;
 }
 function empty(title, text) { const box = panel(title, 2, 'empty'); box.append(el('p', text)); return box; }
-function tracking() {
+function tracking(title = 'Acompanhamento') {
   const container = el('div');
-  container.append(heading('Acompanhamento', 'Resultados e próximos passos das consultas encerradas.'));
+  container.append(heading(title, 'Resultados e próximos passos das consultas encerradas.'));
   const closed = model.surveys.filter(s => s.closed);
   if (!closed.length) {
     container.append(empty('Nenhuma consulta encerrada', 'Os resultados e os encaminhamentos aparecerão aqui quando a gestão encerrar uma consulta.'));
@@ -341,7 +358,7 @@ function invites() {
     const generated=await api('/api/invites',{residence:residence.value});
     output.textContent=`Código gerado para ${residence.value.trim()}: ${generated.code}. O código anterior perdeu o acesso. Copie e guarde este código; ele só aparece agora.`;
     // Atualiza a lista sem remover o código recém-gerado da tela.
-    model=await api('/api/surveys');
+    model=await loadModel();
     residenceList.replaceChildren(...model.residences.map(r=>el('li',r.identifier)));
     message('Código gerado. As participações anteriores foram preservadas.');
   });
@@ -354,14 +371,18 @@ function invites() {
 }
 function resources() {
   const container=el('div');container.append(heading('Regras e contatos','Encontre o canal adequado e consulte os documentos do residencial.'));
-  const channels=panel('Canais por assunto');channels.append(el('p','Contatos do residencial fictício. Nenhum dado pessoal é publicado.',{class:'quiet'}));
+  const channels=panel('Canais por assunto');channels.append(el('p',model.channels.notice,{class:'quiet'}));
   const grid=el('div',undefined,{class:'channel-grid'});
-  for(const [subject,owner] of [['Limpeza e manutenção','Administração'],['Eventos e atividades','Associação'],['Acompanhamento e prestação de contas','Conselho']]){
-    const item=el('section',undefined,{class:'channel'});item.append(el('h3',subject),el('p',owner),el('p','Contato: A informar',{class:'quiet'}));grid.append(item);
+  for(const channel of model.channels.channels){
+    const item=el('section',undefined,{class:'channel'});item.append(el('h3',channel.subject),el('p',channel.owners.join(' e ')),el('p',`Contato: ${channel.contact}`,{class:'quiet'}));grid.append(item);
   }
   channels.append(grid);
   const documents=panel('Documentos do residencial');
-  for(const title of ['Convenção do residencial','Regimento interno','Calendário e regras de eventos']){
+  const doc=model.regulation;
+  const published=el('section',undefined,{class:'document-row'});
+  published.append(el('h3',doc.title),badge('Publicado','muted'),el('p',`${doc.code} · Versão ${doc.version} · ${formatDate(doc.date)}`,{class:'hint'}),el('p',doc.notice,{class:'quiet'}),link('Ler regulamento','#regras/regulamento'));
+  documents.append(published);
+  for(const title of ['Convenção do residencial','Calendário e regras de eventos']){
     const row=el('section',undefined,{class:'document-row'});row.append(el('h3',title),badge('Aguardando publicação','muted'),el('p','Fonte/link: Aguardando publicação · Data da versão: A informar',{class:'hint'}));documents.append(row);
   }
   const references=panel('Legislação e orientações gerais');
@@ -373,39 +394,390 @@ function resources() {
   }
   container.append(channels,documents,references);return container;
 }
+function regulationPage(articleNumber) {
+  const doc=model.regulation;
+  const container=el('div',undefined,{class:'detail'});
+  container.append(link('Voltar a Regras e contatos','#regras','back-link'),heading(doc.title,`${doc.code} · Versão ${doc.version} · ${formatDate(doc.date)}`));
+  container.append(el('p',doc.notice,{class:'quiet'}));
+  if(articleNumber && !doc.articles.some(article=>article.number===Number(articleNumber)))container.append(el('p','Artigo não encontrado. Consulte os artigos disponíveis abaixo.',{role:'status'}));
+  for(const article of doc.articles) {
+    const label=article.number<10 ? `${article.number}º` : String(article.number);
+    const box=panel(`Art. ${label} — ${article.title}`);
+    box.querySelector('h2').id=`regulation-article-${article.number}`;
+    box.querySelector('h2').setAttribute('tabindex','-1');
+    box.append(el('p',article.text),link(`Link para o art. ${label}`,`#regras/artigo/${article.number}`));container.append(box);
+  }
+  return container;
+}
+function formatDateTime(value) {
+  return value ? new Date(value).toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'}) : 'A informar';
+}
+function serviceCard(item, admin = false) {
+  const box = panel(`Protocolo ${item.protocol}`, 2, admin ? 'order-card' : 'request-card');
+  box.setAttribute('data-protocol', item.protocol);
+  box.append(badge(item.status, item.status === 'Concluída' ? 'closed' : 'open'),
+    el('p', `${item.local} · ${item.category}`, {class:'service-context'}),
+    el('p', item.description, {class:'service-description'}),
+    facts([['Aberta em', formatDateTime(item.created_at)], ['Equipe responsável', item.team]]));
+  if (item.status === 'Concluída') {
+    const feedback = el('div', undefined, {class:'service-feedback'});
+    feedback.append(el('h3', 'Devolutiva'), el('p', item.feedback), el('p', `Concluída em ${formatDateTime(item.completed_at)}`, {class:'hint'}));
+    box.append(feedback);
+  } else if (!admin) box.append(el('p', 'A ordem de limpeza foi criada automaticamente e aguarda execução.', {class:'hint'}));
+  if (admin) box.append(link(item.status === 'Pendente' ? 'Abrir tarefa' : 'Ver conclusão', `#limpeza/${item.protocol}`, 'primary'));
+  return box;
+}
+function requestsPage() {
+  const container = el('div');
+  container.append(heading('Minhas solicitações', 'Solicite a higiene da academia e acompanhe o atendimento pelo protocolo.'));
+  const refreshForm = el('form', undefined, {class:'service-refresh'});
+  submit(refreshForm, 'Atualizar solicitações', async () => { await refresh('Solicitações atualizadas.'); });
+  container.append(refreshForm);
+  const layout = el('div', undefined, {class:'service-layout'});
+  const box = panel('Solicitar higiene da academia');
+  box.append(el('p', 'Uma ordem será encaminhada automaticamente à equipe de limpeza. Use apenas dados fictícios nesta demonstração.', {class:'quiet'}));
+  const form = el('form');
+  const fixed = el('div', undefined, {class:'form-grid'});
+  field(fixed, 'Local', 'service-local', 'input', {value:'Academia', readonly:''});
+  field(fixed, 'Categoria', 'service-category', 'input', {value:'Higiene', readonly:''});
+  form.append(fixed);
+  const description = field(form, 'Descrição da solicitação', 'service-description', 'textarea', {required:'',maxlength:'1500',rows:'4',placeholder:'Ex.: Os aparelhos da academia estão sujos'});
+  form.append(el('p', 'Descreva o que precisa ser limpo, sem incluir dados pessoais. Limite de 1500 caracteres.', {class:'hint'}));
+  submit(form, 'Enviar solicitação', async () => {
+    // O POST é o gatilho; a criação da OS acontece exclusivamente no servidor.
+    const result = await api('/api/requests', {local:'Academia',category:'Higiene',description:description.value});
+    await refresh(`Solicitação ${result.request.protocol} registrada. Ordem de limpeza criada automaticamente.`, 'solicitacoes');
+  });
+  box.append(form);
+  const list = el('section', undefined, {'aria-label':'Solicitações da minha residência',class:'service-list'});
+  list.append(el('h2', 'Histórico da residência'));
+  if (!model.requests.length) list.append(el('p', 'Você ainda não tem solicitações.', {class:'empty-inline'}));
+  for (const item of model.requests) list.append(serviceCard(item));
+  layout.append(box,list);container.append(layout);return container;
+}
+function cleaningQueue() {
+  const container = el('div');
+  container.append(heading('Fila de limpeza', 'Ordens criadas automaticamente pelas solicitações de higiene da academia.', 'ÁREA DA GESTÃO'));
+  const form = el('form', undefined, {class:'service-refresh'});
+  submit(form, 'Atualizar fila', async () => { await refresh('Fila de limpeza atualizada.'); });
+  container.append(form);
+  for (const [title, status] of [['Pendentes','Pendente'],['Concluídas','Concluída']]) {
+    const group = el('section', undefined, {class:'tracking-group'});
+    group.append(el('h2', title));
+    const items = model.requests.filter(item => item.status === status);
+    if (!items.length) group.append(el('p', status === 'Pendente' ? 'Nenhuma ordem de limpeza pendente.' : 'Nenhuma ordem concluída.', {class:'empty-inline'}));
+    const grid = el('div', undefined, {class:'survey-grid'});
+    for (const item of items) grid.append(serviceCard(item,true));
+    group.append(grid);container.append(group);
+  }
+  return container;
+}
+function cleaningDetail(item) {
+  const container = el('div', undefined, {class:'detail'});
+  container.append(link('Voltar à fila de limpeza','#limpeza','back-link'), heading(`Ordem ${item.protocol}`, 'Higiene da academia · atendimento da equipe de limpeza', 'ÁREA DA GESTÃO'));
+  container.append(serviceCard(item));
+  if (item.status === 'Pendente') {
+    const box = panel('Concluir a ordem de serviço');
+    box.append(el('p', 'Ao confirmar, o status e a devolutiva serão salvos juntos e ficarão disponíveis para a residência no mesmo protocolo.', {class:'quiet'}));
+    const form = el('form');
+    const feedback = field(form, 'O que foi feito?', 'cleaning-feedback', 'textarea', {required:'',maxlength:'1500',rows:'4',placeholder:'Ex.: Aparelhos higienizados'});
+    submit(form, 'Confirmar conclusão', async () => {
+      await api(`/api/cleaning/${item.protocol}/complete`, {feedback:feedback.value});
+      await refresh('Conclusão e devolutiva salvas. A residência já pode acompanhar o retorno no mesmo protocolo.');
+    });
+    box.append(form);container.append(box);
+  }
+  return container;
+}
+function usageGuide(admin) {
+  const box=panel('Como usar o sistema',2,'usage-guide');
+  box.querySelector('h2').id='usage-guide-heading';box.querySelector('h2').setAttribute('tabindex','-1');
+  box.append(el('p',admin ? 'Da consulta ao retorno: siga estas etapas para manter os moradores informados.' : 'Escolha uma área no menu à esquerda. Veja o que você pode fazer em cada uma.',{class:'quiet'}));
+  const grid=el('div',undefined,{class:'guide-grid'});
+  const steps=admin ? [
+    ['Crie uma consulta','Apresente a proposta, o prazo e as opções para ouvir as residências.','Abrir Consultas','#consultas'],
+    ['Convide os moradores','Gere um código para cada residência e compartilhe-o em particular.','Convidar residências','#gestao/convites'],
+    ['Encerre e dê retorno','Encerre a votação e publique a decisão, o próximo passo e a data do próximo retorno.','Ver Devolutivas','#devolutivas']
+  ] : [
+    ['Participe das consultas','Leia a proposta, escolha uma opção por pergunta e confirme. Cada residência participa uma vez.','Ver consultas abertas','#consultas'],
+    ['Acompanhe as decisões','Após o encerramento, confira os resultados, a decisão da gestão e o próximo retorno.','Ver resultados e retornos','#acompanhamento'],
+    ['Peça a limpeza da academia','Descreva a necessidade em Minhas solicitações. Guarde o protocolo para acompanhar o atendimento.','Abrir minhas solicitações','#solicitacoes'],
+    ['Encontre regras e contatos','Consulte os documentos disponíveis e o canal responsável por cada assunto.','Consultar regras e contatos','#regras']
+  ];
+  steps.forEach(([title,text,label,to],index)=>{
+    const item=el('section',undefined,{class:'guide-step'});item.append(el('span',String(index+1).padStart(2,'0'),{class:'guide-number','aria-hidden':'true'}),el('h3',title),el('p',text),link(label,to));grid.append(item);
+  });
+  box.append(grid);return box;
+}
+function residentHome() {
+  const container=el('div',undefined,{class:'resident-home'});
+  container.append(heading('Início','Participe das decisões e acompanhe o atendimento da sua residência.','ÁREA DO MORADOR'));
+  const metrics=el('div',undefined,{class:'admin-metrics','aria-label':'Resumo da residência'});
+  for(const [title,count] of [
+    ['Consultas para responder',model.surveys.filter(s=>!s.closed && !s.voted).length],
+    ['Minhas solicitações pendentes',model.requests.filter(r=>r.status==='Pendente').length],
+    ['Retornos publicados',model.surveys.filter(s=>s.closed && s.response).length]]) {
+    const item=el('div',undefined,{class:'admin-metric'});item.append(el('p',title),el('strong',String(count)));metrics.append(item);
+  }
+  container.append(metrics,usageGuide(false));
+  const updates=panel('Consultas abertas',2,'home-updates');
+  const opened=model.surveys.filter(s=>!s.closed);
+  if(!opened.length)updates.append(el('p','Não há consultas abertas no momento.',{class:'quiet'}));
+  for(const survey of opened) {
+    const row=el('div',undefined,{class:'home-update-row'});const text=el('div');
+    text.append(el('h3',survey.title),el('p',survey.voted ? 'Sua participação já está registrada.' : `Prazo de participação: ${formatDate(survey.deadline)}`,{class:'quiet'}));
+    row.append(text,link(survey.voted ? 'Acompanhar consulta' : 'Responder',`#consulta/${survey.id}`,'secondary'));updates.append(row);
+  }
+  container.append(updates);return container;
+}
+// Estrutura do sistema compartilhada; opções e permissões continuam separadas por perfil.
+
+let systemMenuOpen = false;
+let introState = null;
+const INTRO_KEY = 'pr-gestao-introducao';
+const adminDialog = document.querySelector('#admin-intro');
+const adminMenu = document.querySelector('#admin-menu');
+function systemMobile() { return matchMedia('(max-width: 760px)').matches; }
+function adminIcon(name) {
+  const paths = {
+    home:'M3 10 12 3l9 7v11h-6v-7H9v7H3Z',
+    surveys:'M5 3h14v18H5ZM8 8h8M8 12h8M8 16h5',
+    response:'M4 4h16v12H9l-5 4ZM8 8h8M8 12h5',
+    invites:'M3 5h18v14H3Zm0 0 9 7 9-7',
+    cleaning:'m7 3 10 18M4 17l9-5 7 7-5 3Z',
+    help:'M9 8a3 3 0 1 1 5 2c-2 1-2 2-2 3M12 17h.01M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20'
+  };
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  for(const [key,value] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.7','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true',focusable:'false'}))svg.setAttribute(key,value);
+  const path=document.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',paths[name] || paths.home);svg.append(path);return svg;
+}
+function setSystemMenu(open, focus = false) {
+  systemMenuOpen = Boolean(open && model && systemMobile());
+  document.body.classList.toggle('admin-menu-open',systemMenuOpen);
+  adminMenu.setAttribute('aria-expanded',String(systemMenuOpen));
+  document.querySelector('#admin-backdrop').hidden=!systemMenuOpen;
+  document.querySelector('#main').inert=systemMenuOpen;
+  if(focus) {
+    if(systemMenuOpen)navigation.querySelector('a')?.focus();
+    else adminMenu.focus();
+  }
+}
+function resetSystemShell() {
+  if(introState) dismissAdminIntro(false);
+  document.body.classList.remove('app-shell','admin','resident','admin-menu-open','admin-touring');
+  document.querySelector('#admin-header').hidden=true;
+  document.querySelector('#admin-backdrop').hidden=true;
+  document.querySelector('#main').inert=false;
+  navigation.className='';navigation.removeAttribute('aria-label');
+  document.querySelector('.account').append(logout);
+  logout.className='header-button';
+  systemMenuOpen=false;adminMenu.setAttribute('aria-expanded','false');
+}
+function systemSection(current) {
+  if(current.startsWith('regras/'))return 'regras';
+  if(!model.admin) {
+    if(current.startsWith('consulta/'))return 'consultas';
+    return ['inicio','consultas','acompanhamento','solicitacoes','regras','assistente'].includes(current) ? current : 'inicio';
+  }
+  if(current==='gestao/convites')return 'convites';
+  if(current==='devolutivas' || current==='acompanhamento')return 'devolutivas';
+  if(current.startsWith('limpeza'))return 'limpeza';
+  if(current.startsWith('consulta/')) {
+    const survey=model.surveys.find(s=>`consulta/${s.id}`===current);
+    return survey?.closed ? 'devolutivas' : 'consultas';
+  }
+  return current==='consultas' || current==='gestao/nova' ? 'consultas' : 'visao-geral';
+}
+function renderSystemShell(current) {
+  document.body.classList.add('app-shell');
+  document.body.classList.toggle('admin',model.admin);document.body.classList.toggle('resident',!model.admin);
+  navigation.className='admin-sidebar';navigation.setAttribute('aria-label',model.admin ? 'Painel da gestão' : 'Área do morador');
+  document.querySelector('#admin-header').hidden=false;
+  const active=systemSection(current);
+  const labels={'visao-geral':'Visão geral',consultas:'Consultas',devolutivas:'Devolutivas',convites:'Convites',limpeza:'Fila de limpeza',inicio:'Início',acompanhamento:'Acompanhamento',solicitacoes:'Minhas solicitações',regras:'Regras e contatos',assistente:'Assistente'};
+  document.querySelector('#admin-section-name').textContent=labels[active];
+  document.querySelector('.admin-header-profile').textContent=model.admin ? 'Gestão · Demonstração' : 'Morador · Demonstração';
+  const brand=el('div',undefined,{class:'sidebar-brand'});
+  const name=el('div');name.append(el('strong','Prioridades do Residencial'),el('small',model.name));
+  brand.append(el('span','PR',{class:'brand-mark','aria-hidden':'true'}),name);
+  const nav=el('nav',undefined,{'aria-label':'Navegação do portal',class:'admin-nav'});
+  const sections=model.admin ? [
+    ['Visão geral','visao-geral','visao-geral','home'],['Consultas','consultas','consultas','surveys'],
+    ['Devolutivas','devolutivas','devolutivas','response'],['Convites','convites','gestao/convites','invites'],
+    ['Fila de limpeza','limpeza','limpeza','cleaning']] : [
+    ['Início','inicio','inicio','home'],['Consultas','consultas','consultas','surveys'],
+    ['Acompanhamento','acompanhamento','acompanhamento','response'],
+    ['Minhas solicitações','solicitacoes','solicitacoes','cleaning'],['Regras e contatos','regras','regras','surveys']];
+  for(const [label,section,to,icon] of sections) {
+    const item=link('',`#${to}`);item.append(adminIcon(icon),el('span',label));item.setAttribute('data-admin-section',section);
+    if(section===active)item.setAttribute('aria-current','page');
+    item.addEventListener('click',()=>{setSystemMenu(false);if(route()===to)focusPage();});nav.append(item);
+  }
+  const foot=el('div',undefined,{class:'sidebar-footer'});
+  const help=el('button',undefined,{type:'button',id:model.admin ? 'admin-help' : 'resident-help',class:'sidebar-help'});
+  help.append(adminIcon('help'),el('span',model.admin ? 'Como usar o painel' : 'Como usar o sistema'));
+  help.addEventListener('click',()=>{
+    if(model.admin)showAdminIntro(help);
+    else {
+      setSystemMenu(false);history.replaceState(null,'','#inicio');draw();focusPage();
+      const guide=document.querySelector('#usage-guide-heading');guide.focus({preventScroll:true});guide.scrollIntoView({block:'start'});
+    }
+  });
+  logout.className='sidebar-logout';
+  foot.append(help,logout,el('small','Ambiente de demonstração'));
+  navigation.replaceChildren(brand,el('p',model.admin ? 'ÁREA DA GESTÃO' : 'ÁREA DO MORADOR',{class:'sidebar-caption'}),nav,foot);
+  setSystemMenu(systemMenuOpen);
+}
+function adminOverview() {
+  const container=el('div',undefined,{class:'admin-overview'});
+  container.append(heading('Visão geral','Veja o que precisa da sua atenção e acompanhe o retorno aos moradores.','GESTÃO DO RESIDENCIAL'));
+  const actions=el('div',undefined,{class:'admin-actions'});
+  const create=link('Criar consulta','#gestao/nova','primary');create.id='admin-create-shortcut';
+  actions.append(create,link('Gerenciar convites','#gestao/convites','secondary'));
+  const update=el('form');submit(update,'Atualizar painel',async()=>{await refresh('Painel atualizado.');});actions.append(update);container.append(actions);
+  const metrics=el('div',undefined,{class:'admin-metrics','aria-label':'Indicadores das consultas'});
+  for(const [label,value,description] of [
+    ['Consultas abertas',model.surveys.filter(s=>!s.closed).length,'Recebendo a participação dos moradores'],
+    ['Aguardando devolutiva',model.surveys.filter(s=>s.closed && !s.response).length,'Consultas encerradas sem decisão publicada'],
+    ['Retornos publicados',model.surveys.filter(s=>s.closed && s.response).length,'Decisões disponíveis para acompanhamento']]) {
+    const item=el('div',undefined,{class:'admin-metric'});item.append(el('p',label),el('strong',String(value)),el('small',description));metrics.append(item);
+  }
+  container.append(metrics);
+  const attention=panel('Precisa de atenção',2,'admin-attention');
+  attention.append(el('p','Resolva as tarefas pendentes e mantenha os moradores informados.',{class:'quiet'}));
+  const items=[...model.requests.filter(r=>r.status==='Pendente').map(r=>({kind:'cleaning',title:`Higiene da academia · ${r.protocol}`,description:r.description,label:'Abrir tarefa',href:`#limpeza/${r.protocol}`})),
+    ...model.surveys.filter(s=>s.closed && !s.response).map(s=>({kind:'response',title:s.title,description:'Consulta encerrada. Os moradores aguardam a decisão e o próximo passo.',label:'Publicar devolutiva',href:`#consulta/${s.id}`}))];
+  if(!items.length)attention.append(el('p','Nenhuma pendência no momento',{class:'no-pending'}));
+  for(const item of items) {
+    const row=el('div',undefined,{class:'attention-item','data-kind':item.kind});
+    const text=el('div');text.append(badge(item.kind==='cleaning'?'Limpeza pendente':'Aguardando devolutiva'),el('h3',item.title),el('p',item.description));
+    row.append(text,link(item.label,item.href,'secondary'));attention.append(row);
+  }
+  container.append(attention,usageGuide(true));return container;
+}
+function introDismissed() {
+  try { return localStorage.getItem(INTRO_KEY)==='dispensada'; } catch { return false; }
+}
+function rememberIntro() {
+  try { localStorage.setItem(INTRO_KEY,'dispensada'); } catch { /* A introdução continua utilizável sem storage. */ }
+}
+function showAdminIntro(origin = document.querySelector('#main')) {
+  if(!model?.admin)return;
+  introState={mode:'welcome',step:0,originId:origin.id || 'main',originMenu:systemMenuOpen};
+  renderAdminIntro();
+}
+function dismissAdminIntro(restore = true) {
+  if(!introState)return;
+  const previous=introState;introState=null;rememberIntro();
+  document.querySelectorAll('.tour-target').forEach(node=>node.classList.remove('tour-target'));
+  document.body.classList.remove('admin-touring');
+  if(adminDialog.open)adminDialog.close();
+  setSystemMenu(restore && previous.originMenu);
+  if(restore) {
+    const origin=document.getElementById(previous.originId);
+    const visible=origin && origin.getClientRects().length && getComputedStyle(origin).visibility!=='hidden' && !origin.closest('[inert]');
+    (visible ? origin : systemMobile() ? adminMenu : document.querySelector('#main')).focus();
+  }
+}
+function startAdminTour() {
+  rememberIntro();introState.mode='tour';introState.step=0;
+  history.replaceState(null,'','#visao-geral');draw();
+}
+function renderAdminIntro() {
+  if(!introState || !model?.admin)return;
+  document.querySelectorAll('.tour-target').forEach(node=>node.classList.remove('tour-target'));
+  const touring=introState.mode==='tour';
+  document.body.classList.toggle('admin-touring',touring);adminDialog.className=touring?'tour-dialog':'welcome-dialog';
+  const close=el('button','×',{type:'button',class:'intro-close','aria-label':'Fechar introdução'});close.addEventListener('click',()=>dismissAdminIntro());
+  const title=el('h2',undefined,{id:'admin-intro-title'});const text=el('p',undefined,{id:'admin-intro-text'});
+  const controls=el('div',undefined,{class:'intro-controls'});
+  const makeButton=(label,action,className='primary')=>{const button=el('button',label,{type:'button',class:className});button.addEventListener('click',action);return button;};
+  if(!touring) {
+    title.textContent='Boas-vindas ao painel da gestão';
+    text.textContent='Aqui você pode criar consultas, convidar os moradores a participar e acompanhar o que ainda precisa de retorno. Para começar, abra a Visão geral e veja suas pendências. Ao encerrar uma consulta, publique a decisão e o próximo passo para que os moradores saibam o que aconteceu.';
+    controls.append(makeButton('Fazer tour',startAdminTour),makeButton('Agora não',()=>dismissAdminIntro(),'secondary'));
+    adminDialog.replaceChildren(close,el('span','PR',{class:'intro-mark','aria-hidden':'true'}),title,text,controls);
+  } else {
+    const steps=[
+      {title:'Visão geral',text:'Veja quais consultas estão abertas e quais aguardam retorno.',selector:'[data-admin-section="visao-geral"]'},
+      {title:'Criar consulta',text:'Cadastre a pergunta e as opções que os moradores poderão escolher.',selector:'#admin-create-shortcut'},
+      {title:'Devolutivas',text:'Depois do encerramento, publique a decisão e informe o próximo passo.',selector:'[data-admin-section="devolutivas"]'}
+    ];
+    const step=steps[introState.step];title.textContent=step.title;text.textContent=step.text;
+    if(systemMobile())setSystemMenu(introState.step!==1);
+    if(introState.step>0)controls.append(makeButton('Voltar',()=>{introState.step--;renderAdminIntro();},'secondary'));
+    const next=makeButton(introState.step===2?'Concluir tour':'Avançar',()=>{if(introState.step===2)dismissAdminIntro();else{introState.step++;renderAdminIntro();}});next.id='intro-next';controls.append(next);
+    adminDialog.replaceChildren(close,el('p',`${introState.step+1} de 3`,{class:'tour-progress','aria-live':'polite'}),title,text,controls);
+    const target=document.querySelector(step.selector);
+    if(target) {target.classList.add('tour-target');target.scrollIntoView({block:'center',inline:'nearest'});}
+  }
+  if(!adminDialog.open)adminDialog.showModal();
+  (touring ? adminDialog.querySelector('#intro-next') : close).focus();
+}
+adminDialog.addEventListener('keydown',event=>{
+  if(event.key!=='Tab')return;
+  const controls=[...adminDialog.querySelectorAll('button:not([disabled]),a[href]')].filter(node=>node.getClientRects().length);
+  const first=controls[0],last=controls[controls.length-1];
+  if(event.shiftKey && (document.activeElement===first || !adminDialog.contains(document.activeElement))){event.preventDefault();last?.focus();}
+  else if(!event.shiftKey && (document.activeElement===last || !adminDialog.contains(document.activeElement))){event.preventDefault();first?.focus();}
+});
+adminDialog.addEventListener('cancel',event=>{event.preventDefault();dismissAdminIntro();});
+adminMenu.addEventListener('click',()=>setSystemMenu(!systemMenuOpen,true));
+document.querySelector('#admin-backdrop').addEventListener('click',()=>setSystemMenu(false,true));
+document.addEventListener('keydown',event=>{if(event.key==='Escape' && systemMenuOpen && !adminDialog.open){event.preventDefault();setSystemMenu(false,true);}});
+matchMedia('(max-width: 760px)').addEventListener('change',()=>{
+  if(!model)return;
+  const sidebarFocus=systemMobile() && navigation.contains(document.activeElement);
+  setSystemMenu(false);
+  if(introState?.mode==='tour')renderAdminIntro();
+  else if(sidebarFocus && !adminDialog.open)adminMenu.focus();
+});
+
 function draw() {
   if(!model)return;
   logout.hidden=false;
   document.querySelector('#residential-name').textContent=model.name;
   const profile=document.querySelector('#profile');profile.hidden=false;profile.textContent=model.admin?'Gestão':'Morador';
   const current=route();
-  const nav=el('nav',undefined,{'aria-label':'Navegação do portal',class:'portal-nav'});
-  for(const [label,to] of [['Consultas','consultas'],['Acompanhamento','acompanhamento'],['Regras e contatos','regras']]){
-    const a=link(label,`#${to}`);
-    if(current===to || (to==='consultas' && (current.startsWith('consulta/') || current.startsWith('gestao/'))))a.setAttribute('aria-current','page');
-    nav.append(a);
-  }
-  navigation.replaceChildren(nav);
+  renderSystemShell(current);
   let page;
   const match=current.match(/^consulta\/([0-9]{1,12})$/);
   if(match){
     const survey=model.surveys.find(s=>s.id===Number(match[1]));
     page=survey ? detail(survey) : heading('Consulta não encontrada','A consulta não está disponível. Use a navegação para voltar à lista.');
-  } else if(current==='acompanhamento')page=tracking();
+  } else if(current==='inicio' && !model.admin)page=residentHome();
+  else if(current==='visao-geral') page=model.admin ? adminOverview() : heading('Área exclusiva da gestão','Use Consultas para participar e acompanhar os resultados.');
+  else if(current==='devolutivas') page=model.admin ? tracking('Devolutivas') : heading('Área exclusiva da gestão','Use Acompanhamento para consultar os retornos.');
+  else if(current==='acompanhamento')page=tracking(model.admin ? 'Devolutivas' : 'Acompanhamento');
   else if(current==='regras')page=resources();
+  else if(current==='regras/regulamento' || /^regras\/artigo\/\d+$/.test(current))page=regulationPage(current.split('/')[2]);
+  else if(current==='assistente')page=model.admin ? adminOverview() : residentHome();
+  else if(current==='solicitacoes') {
+    page=model.admin ? heading('Área exclusiva do morador', 'Use Fila de limpeza para consultar e concluir ordens.') : requestsPage();
+  } else if(current==='limpeza' || current.startsWith('limpeza/')) {
+    if (!model.admin) page=heading('Área exclusiva da gestão','Use Minhas solicitações para acompanhar os protocolos da sua residência.');
+    else if(current==='limpeza') page=cleaningQueue();
+    else {
+      const item=model.requests.find(item => `limpeza/${item.protocol}`===current);
+      page=item ? cleaningDetail(item) : heading('Ordem não encontrada','Use Fila de limpeza para consultar as ordens disponíveis.');
+    }
+  }
   else if(current==='gestao/nova' || current==='gestao/convites'){
     page=model.admin ? (current==='gestao/nova' ? createSurvey() : invites()) : heading('Área exclusiva da gestão','Use Consultas para participar e Acompanhamento para conferir os retornos.');
   } else {
-    if(current!=='consultas')history.replaceState(null,'','#consultas');
-    page=dashboard();
+    if(current!=='consultas') history.replaceState(null,'',model.admin ? '#visao-geral' : '#inicio');
+    page=current==='consultas' ? dashboard() : model.admin ? adminOverview() : residentHome();
   }
   content.replaceChildren(page);
+  PRassistant.sync();
+  if(current==='assistente' && !model.admin)PRassistant.open();
   document.title=`${content.querySelector('h1').textContent} · Prioridades do Residencial`;
+  if (model.admin && introState?.mode==='tour') renderAdminIntro();
 }
 document.querySelector('.skip').addEventListener('click', event => { event.preventDefault(); focusPage(); });
 window.addEventListener('hashchange',()=>{if(model){message();draw();focusPage();}});
 logout.addEventListener('click',()=>{
   sessionGeneration += 1;
-  code='';model=null;message();history.replaceState(null,'','#consultas');login();document.querySelector('#access').focus();
+  code='';model=null;message();history.replaceState(null,'',location.pathname+location.search);login();document.querySelector('#access').focus();
 });
 login();

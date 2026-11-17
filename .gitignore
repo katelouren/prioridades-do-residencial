@@ -43,3 +43,6 @@ Thumbs.db
 *~
 /tmp/
 /temp/
+
+# Preferências locais do editor (preservadas somente nesta máquina)
+/.vscode/

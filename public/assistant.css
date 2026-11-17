@@ -1,0 +1,51 @@
+/* Todos os estilos novos ficam dentro do componente. */
+#pr-assistant {font-family:inherit;color:#10283f;position:fixed;right:max(20px,env(safe-area-inset-right));bottom:calc(20px + env(safe-area-inset-bottom) + var(--pr-chat-bottom,0px));z-index:70;max-width:calc(100vw - 32px)}
+#pr-assistant [hidden] {display:none!important}
+#pr-assistant * {box-sizing:border-box}
+#pr-assistant button,#pr-assistant input,#pr-assistant textarea {font:inherit}
+#pr-assistant button {cursor:pointer;min-height:44px;border:1px solid #40764d;border-radius:12px;padding:9px 14px;background:#dff4c4;color:#10283f;font-weight:600;line-height:1.35}
+#pr-assistant button:hover {background:#c8eca0}
+#pr-assistant button:disabled {opacity:.6;cursor:wait}
+#pr-assistant :is(button,a,input,textarea,summary):focus-visible {outline:3px solid #3b7829;outline-offset:3px}
+#pr-assistant .pr-chat-launcher {display:flex;align-items:center;gap:12px;border-radius:32px;background:#b9ed79;padding:14px 20px;box-shadow:0 5px 22px #10283f30}
+#pr-assistant .pr-chat-icon {width:22px;height:19px;border:2px solid currentColor;border-radius:9px;position:relative}
+#pr-assistant .pr-chat-icon::after {content:'';position:absolute;bottom:-5px;left:2px;width:6px;height:7px;border-left:2px solid currentColor;transform:skew(-25deg);background:#b9ed79}
+#pr-assistant-panel {display:flex;flex-direction:column;width:420px;max-width:calc(100vw - 32px);height:min(720px,calc(var(--pr-chat-height,100dvh) - 40px));background:#f9fcff;border:1px solid #618753;border-radius:22px;box-shadow:0 12px 50px #10283f40;overflow:hidden}
+#pr-assistant header {display:flex;align-items:center;justify-content:space-between;gap:8px;background:#10283f;color:white;padding:14px 16px;flex-shrink:0}
+#pr-assistant h2 {font-size:1.1rem;margin:0;color:inherit;line-height:1.4}
+#pr-assistant header button {background:transparent;color:white;border:0;font-size:26px;padding:0;width:44px}
+#pr-assistant .pr-chat-log {flex:1;min-height:60px;overflow-y:auto;overscroll-behavior:contain;padding:16px;scroll-padding:12px}
+#pr-assistant .pr-chat-bubble {padding:12px;background:#eaf1f8;border-radius:14px 14px 14px 3px;margin:0 20px 14px 0;font-size:.92rem;overflow-wrap:anywhere}
+#pr-assistant .pr-chat-bubble p {margin:0 0 8px;white-space:pre-wrap;line-height:1.5}
+#pr-assistant .pr-chat-bubble p:last-child {margin-bottom:0}
+#pr-assistant .pr-chat-user {background:#dff4c4;margin:0 0 14px 32px;border-radius:14px 14px 3px 14px}
+#pr-assistant .pr-chat-error {background:#ffeadf}
+#pr-assistant small {display:block;font-size:.76rem;line-height:1.4;margin-bottom:8px}
+#pr-assistant a {display:block;color:#173e66;margin:10px 0;text-decoration:underline}
+#pr-assistant details {font-size:.82rem;margin:8px 0}
+#pr-assistant summary {cursor:pointer}
+#pr-assistant label {display:block;font-size:.83rem;font-weight:600;margin:10px 0 5px}
+#pr-assistant input,#pr-assistant textarea {display:block;width:100%;min-height:44px;border:1px solid #718498;border-radius:10px;background:white;color:#10283f;padding:9px;resize:vertical}
+#pr-assistant .pr-chat-suggestions {display:flex;gap:6px;overflow-x:auto;padding:8px 12px;flex-shrink:0}
+#pr-assistant .pr-chat-suggestions button {font-size:.77rem;min-width:145px;flex-shrink:0;max-width:190px}
+#pr-assistant .pr-chat-update {background:transparent;border:0;font-size:.78rem;align-self:flex-start;margin-left:8px;flex-shrink:0}
+#pr-assistant .pr-chat-composer {display:grid;grid-template-columns:1fr auto;gap:8px;padding:0 12px 8px;flex-shrink:0;margin:0}
+#pr-assistant .pr-chat-composer label {grid-column:1/-1;margin:0}
+#pr-assistant .pr-chat-composer textarea {resize:none;max-height:100px}
+#pr-assistant .pr-chat-note {padding:0 12px 10px;margin:0;flex-shrink:0;color:#4e6070;font-size:.7rem}
+#pr-assistant .request-card {background:white;padding:10px;margin-top:12px;font-size:.85rem}
+#pr-assistant .request-card h2,#pr-assistant .request-card h3 {font-size:1rem;color:#10283f}
+@media(max-width:760px) {
+  #pr-assistant {right:max(12px,env(safe-area-inset-right));bottom:calc(12px + env(safe-area-inset-bottom) + var(--pr-chat-bottom,0px))}
+  #pr-assistant-panel {max-width:calc(100vw - 24px);height:min(720px,calc(var(--pr-chat-height,100dvh) - 24px))}
+  #pr-assistant .pr-chat-launcher {font-size:.85rem;padding:11px 16px}
+}
+@media(max-height:480px) {
+  #pr-assistant header {padding:4px 12px}
+  #pr-assistant .pr-chat-note {display:none}
+  #pr-assistant .pr-chat-suggestions {padding:4px 8px}
+  #pr-assistant .pr-chat-update {min-height:32px}
+}
+
+#pr-assistant .pr-chat-launcher {transform:translateY(calc(-1 * var(--pr-chat-lift,0px)))}
+body.admin-menu-open #pr-assistant {visibility:hidden}
